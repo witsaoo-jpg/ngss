@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ตารางเวรพยาบาล v41 - Pattern & Limits</title>
+    <title>ตารางเวรพยาบาล v40.3 - Workday Target</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="importmap">
     {
@@ -25,7 +25,7 @@
         th, td { white-space: nowrap; text-align: center; border: 1px solid #e2e8f0; height: 32px; padding: 0 4px; font-size: 13px; box-sizing: border-box; }
         .sticky-1 { position: sticky; left: 0; width: 40px; min-width: 40px; background-color: white; z-index: 35; border-right: 1px solid #e2e8f0; }
         .sticky-2 { position: sticky; left: 40px; width: 160px; min-width: 160px; background-color: white; z-index: 35; border-right: 1px solid #e2e8f0; }
-        .sticky-3 { position: sticky; left: 200px; width: 150px; min-width: 150px; background-color: white; border-right: 3px solid #cbd5e1; box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.1); z-index: 35; }
+        .sticky-3 { position: sticky; left: 200px; width: 70px; min-width: 70px; background-color: white; border-right: 3px solid #cbd5e1; box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.1); z-index: 35; }
         thead tr th { position: sticky; top: 0; z-index: 40; background-color: #f1f5f9; color: #334155; height: 50px; }
         thead tr th.sticky-1, thead tr th.sticky-2, thead tr th.sticky-3 { z-index: 50; background-color: #f8fafc; }
         .cell-hover:hover { filter: brightness(0.95); cursor: pointer; transform: scale(1.1); transition: transform 0.1s; z-index: 10; position: relative; box-shadow: 0 0 5px rgba(0,0,0,0.2); }
@@ -41,7 +41,7 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Download, Calculator, UserPlus, Trash2, ChevronLeft, ChevronRight, Zap, Eraser, Settings, Edit2, Save, X, Plus, Sliders, AlertTriangle } from 'lucide-react';
+        import { Download, Calculator, UserPlus, Trash2, ChevronLeft, ChevronRight, Zap, Eraser, Settings, Edit2, Save, X, Plus, Sliders } from 'lucide-react';
         import * as XLSX from 'xlsx';
 
         // --- CONFIG ---
@@ -50,6 +50,13 @@
             { id: 'a', label: 'บ', name: 'บ่าย', color: 'bg-yellow-100 text-yellow-800', price: 360, required: 4, isNight: false },
             { id: 'n', label: 'ด', name: 'ดึก', color: 'bg-purple-100 text-purple-800', price: 360, required: 2, isNight: true }
         ];
+
+        const DEFAULT_RULES = {
+            noNightToMorning: true,     
+            noConsecutiveDoubles: false, 
+            equalDistribution: true,    
+            strictWorkLimit: false,     
+        };
 
         const OT_RATE_DEFAULT = 800;
         const NON_WORKING_CODES = ['Va', 'ปช', 'ลาป่วย', 'ลากิจ'];
@@ -83,11 +90,10 @@
             const [nurses, setNurses] = useState(INITIAL_NURSES);
             const [schedule, setSchedule] = useState({});
             const [customHolidays, setCustomHolidays] = useState([]);
+            const [workDayLimit, setWorkDayLimit] = useState(19); // Default to 19 to match screenshot example
             
-            // Limit State
-            const [maxShiftsPerMonth, setMaxShiftsPerMonth] = useState(7); // Default limit 7
-
             const [shiftConfig, setShiftConfig] = useState(DEFAULT_SHIFTS);
+            const [rulesConfig, setRulesConfig] = useState(DEFAULT_RULES);
             const [otRate, setOtRate] = useState(OT_RATE_DEFAULT);
 
             const [showModal, setShowModal] = useState(false);
@@ -98,14 +104,15 @@
 
             useEffect(() => {
                 const loadData = () => {
-                    const data = localStorage.getItem('roster_data_v41');
+                    const data = localStorage.getItem('roster_data_v40_force');
                     if (data) {
                         const parsed = JSON.parse(data);
                         setSchedule(parsed.schedule || {});
                         setNurses(parsed.nurses || INITIAL_NURSES);
                         setCustomHolidays(parsed.holidays || []);
-                        if(parsed.maxLimit) setMaxShiftsPerMonth(parsed.maxLimit);
+                        setWorkDayLimit(parsed.limit || 19);
                         if (parsed.shiftConfig) setShiftConfig(parsed.shiftConfig);
+                        if (parsed.rulesConfig) setRulesConfig(parsed.rulesConfig);
                         if (parsed.otRate) setOtRate(parsed.otRate);
                     }
                 };
@@ -114,17 +121,18 @@
 
             const saveData = (overrides = {}) => {
                 const dataToSave = {
-                    schedule, nurses, holidays: customHolidays, maxLimit: maxShiftsPerMonth,
-                    shiftConfig, otRate,
+                    schedule, nurses, holidays: customHolidays, limit: workDayLimit,
+                    shiftConfig, rulesConfig, otRate,
                     ...overrides
                 };
                 if (overrides.schedule) setSchedule(overrides.schedule);
                 if (overrides.nurses) setNurses(overrides.nurses);
                 if (overrides.holidays) setCustomHolidays(overrides.holidays);
-                if (overrides.maxLimit) setMaxShiftsPerMonth(overrides.maxLimit);
+                if (overrides.limit) setWorkDayLimit(overrides.limit);
                 if (overrides.shiftConfig) setShiftConfig(overrides.shiftConfig);
+                if (overrides.rulesConfig) setRulesConfig(overrides.rulesConfig);
                 if (overrides.otRate) setOtRate(overrides.otRate);
-                localStorage.setItem('roster_data_v41', JSON.stringify(dataToSave));
+                localStorage.setItem('roster_data_v40_force', JSON.stringify(dataToSave));
             };
 
             const getDaysInMonth = () => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
@@ -133,10 +141,6 @@
             const isHoliday = (day) => {
                 const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
                 return [0, 6].includes(d.getDay()) || customHolidays.includes(day);
-            };
-            const isWeekend = (day) => {
-                const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-                return [0, 6].includes(d.getDay());
             };
 
             const getShiftStyle = (val) => {
@@ -151,7 +155,7 @@
                 let otCount = 0;
                 let workDays = 0;
                 let shiftPay = 0;
-                let breakdown = { m: 0, a: 0, n: 0 };
+                let bdCount = 0;
 
                 for(let d=1; d<=days; d++) {
                     const valTop = schedule[getKey(nurseId, 0, d)] || '0';
@@ -164,18 +168,10 @@
                     if (normShift) {
                         workDays++;
                         shiftPay += normShift.price;
-                        if(normShift.id === 'm') breakdown.m++;
-                        if(normShift.id === 'a') breakdown.a++;
-                        if(normShift.id === 'n') breakdown.n++;
-                    }
-                    if(otShift) { // Add OT to breakdown
-                         if(otShift.id === 'm') breakdown.m++;
-                         if(otShift.id === 'a') breakdown.a++;
-                         if(otShift.id === 'n') breakdown.n++;
+                        if (normShift.price > 0) bdCount++;
                     }
                 }
-                const totalShifts = workDays + otCount; // Total slots filled
-                return { otCount, otPay: otCount * otRate, shiftPay, workDays, totalShifts, breakdown };
+                return { otCount, otPay: otCount * otRate, bdCount, shiftPay, workDays };
             };
 
             const countDailyTotal = (day, label, scheduleToUse = schedule) => {
@@ -187,160 +183,135 @@
                 return count;
             };
 
-            // --- AUTO GENERATE V41: PATTERN & LIMITS ---
+            // --- CORE LOGIC: FORCE FILL ---
             const autoGenerateRoster = async () => {
-                if (!confirm(`🎯 จัดเวรแบบ Pattern?\n- จำกัดเวรคนละไม่เกิน ${maxShiftsPerMonth}\n- พยายามใช้รูปแบบ บ-บ-ด-ด\n- หนต. ขึ้นเฉพาะเช้า จ-ศ`)) return;
+                const totalTarget = shiftConfig.reduce((sum, s) => sum + s.required, 0);
+                const totalCapacity = nurses.length;
+                
+                let confirmMsg = `🎯 ยืนยันการจัดเวร (v40.3)?\n\n` +
+                                 `• เป้าหมายรวม: ${totalTarget} เวร/วัน\n` +
+                                 `• คนที่มี: ${totalCapacity} คน\n`;
+                
+                if (totalTarget > totalCapacity) {
+                    confirmMsg += `⚠️ คำเตือน: เป้าหมายเกินจำนวนคน (${totalTarget} > ${totalCapacity})\n` +
+                                  `ระบบจะบังคับ OT ทันทีเพื่อให้ได้เป้าหมาย!\n`;
+                }
+                
+                if (!confirm(confirmMsg)) return;
 
                 setIsGenerating(true);
                 await new Promise(resolve => setTimeout(resolve, 100));
 
                 const days = getDaysInMonth();
                 let newSchedule = {}; 
-                // Reset
+                
+                // Initialize clean schedule with 0s
                 nurses.forEach(n => {
-                    for(let d=1; d<=days; d++) newSchedule[getKey(n.id, 0, d)] = newSchedule[getKey(n.id, 1, d)] = '0';
+                    for(let d=1; d<=days; d++) {
+                        newSchedule[getKey(n.id, 0, d)] = '0';
+                        newSchedule[getKey(n.id, 1, d)] = '0';
+                    }
                 });
 
                 let nurseStats = {};
-                nurses.forEach(n => nurseStats[n.id] = 0); // Count total shifts
-
-                // 1. Assign HN (Fixed Rules)
-                const hn = nurses.find(isHN);
-                if (hn) {
-                    for (let d = 1; d <= days; d++) {
-                        if (!isHoliday(d) && !isWeekend(d)) {
-                             // Only assign if limit allows (though HN usually works all workdays, user said rules apply)
-                             // HN usually works ~20 days. If limit is 7, HN will stop at 7.
-                             // Let's assume HN Rule overrides Limit if it's "Workdays", 
-                             // BUT user said "shifts <= 7". I will respect the limit strictly as requested.
-                             if (nurseStats[hn.id] < maxShiftsPerMonth) {
-                                newSchedule[getKey(hn.id, 1, d)] = 'ช'; 
-                                nurseStats[hn.id]++;
-                             }
-                        }
-                    }
-                }
-
-                // 2. Assign Pattern A-A-N-N (บ-บ-ด-ด) for others
-                // We'll stagger start days to cover the whole month
-                const normalNurses = nurses.filter(n => !isHN(n));
-                const pattern = ['บ', 'บ', 'ด', 'ด'];
-                
-                // Shuffle nurses to distribute pattern starts randomly
-                const shuffledNurses = [...normalNurses].sort(() => Math.random() - 0.5);
-
-                shuffledNurses.forEach((n, idx) => {
-                    // Stagger start: Nurse 1 starts day 1, Nurse 2 starts day 2...
-                    // Loop through month
-                    let currentPatternIdx = 0;
-                    // Start day offset based on index to spread coverage
-                    let startOffset = (idx * 2) % 4; 
-                    
-                    for (let d = 1; d <= days; d++) {
-                         // Check leaves
-                         if (NON_WORKING_CODES.includes(schedule[getKey(n.id, 1, d)])) continue;
-                         
-                         // Try to apply pattern if valid
-                         let pChar = pattern[(d + startOffset) % 4];
-                         
-                         // Logic: "Pattern" usually implies rotation. 
-                         // Let's try to place chunks.
-                         // Simple approach: Iterate days. If spot free and limit ok, place pattern char.
-                         // But we must check if that char is NEEDED. 
-                         // Pattern approach is good for supply, but we have Demand targets.
-                         
-                         // Modified Pattern Logic: Place A-A-N-N blocks *if needed* and *if limit allows*
-                    }
+                nurses.forEach(n => {
+                    nurseStats[n.id] = { total: 0 };
+                    shiftConfig.forEach(s => nurseStats[n.id][s.id] = 0);
                 });
-                
-                // REVISED LOGIC: Demand-Driven with Pattern Preference
-                // Iterate Day by Day
-                
-                for (let d = 1; d <= days; d++) {
-                    const demand = shiftConfig.map(s => ({...s, current: countDailyTotal(d, s.label, newSchedule)}));
-                    
-                    // Sort demand by most needed (Night > Afternoon > Morning usually)
-                    // But for pattern A-A-N-N, we prioritize continuity.
-                    
-                    // 2.1 Check if anyone is "In Pattern" from yesterday
-                    normalNurses.forEach(n => {
-                        if (nurseStats[n.id] >= maxShiftsPerMonth) return;
-                        
-                        const yest = d > 1 ? newSchedule[getKey(n.id, 1, d-1)] : '0';
-                        let preferred = null;
-                        
-                        // Pattern Logic: 
-                        // If yesterday B (A), today prefer B (A) or D (N)
-                        // If yesterday D (N), today prefer D (N) or Off
-                        // Standard: B -> B -> D -> D -> Off
-                        
-                        if (yest === 'บ') preferred = 'บ'; // B -> B
-                        else if (yest === 'บ' && newSchedule[getKey(n.id, 1, d-2)] === 'บ') preferred = 'ด'; // B B -> D (Logic check: need history)
-                        // Actually easier: look back.
-                        const dMinus1 = d > 1 ? newSchedule[getKey(n.id, 1, d-1)] : '0';
-                        const dMinus2 = d > 2 ? newSchedule[getKey(n.id, 1, d-2)] : '0';
-                        const dMinus3 = d > 3 ? newSchedule[getKey(n.id, 1, d-3)] : '0';
 
-                        if (dMinus1 === 'บ') {
-                            if (dMinus2 !== 'บ') preferred = 'บ'; // First B -> Second B
-                            else preferred = 'ด'; // Second B -> First D
-                        } else if (dMinus1 === 'ด') {
-                            if (dMinus2 !== 'ด') preferred = 'ด'; // First D -> Second D
-                            else preferred = null; // Second D -> Off
-                        } else {
-                            // Yesterday was Off or Morning. Start new pattern?
-                            // preferred = 'บ'; // Start with B
+                const getSortedCandidates = (candidates, shiftId) => {
+                    return [...candidates].sort((a, b) => {
+                        if (rulesConfig.equalDistribution) {
+                            const typeA = nurseStats[a.id][shiftId];
+                            const typeB = nurseStats[b.id][shiftId];
+                            if (typeA !== typeB) return typeA - typeB;
                         }
-                        
-                        // Try to assign preferred if needed
-                        if (preferred) {
-                            const shiftDef = shiftConfig.find(s => s.label === preferred);
-                            if (shiftDef) {
-                                const currentCount = countDailyTotal(d, preferred, newSchedule);
-                                if (currentCount < shiftDef.required) {
-                                    newSchedule[getKey(n.id, 1, d)] = preferred;
-                                    nurseStats[n.id]++;
-                                }
+                        return nurseStats[a.id].total - nurseStats[b.id].total;
+                    });
+                };
+
+                for (let d = 1; d <= days; d++) {
+                    const isRed = isHoliday(d);
+                    const validLabels = shiftConfig.map(s => s.label);
+
+                    // 1. HN Assignment
+                    const hn = nurses.find(isHN);
+                    let hnShiftId = null;
+                    if (hn) {
+                        const k1 = getKey(hn.id, 1, d);
+                        if (!isRed) {
+                            const firstShift = shiftConfig[0]; 
+                            if(firstShift) {
+                                newSchedule[k1] = firstShift.label;
+                                nurseStats[hn.id][firstShift.id]++;
+                                nurseStats[hn.id].total++;
+                                hnShiftId = firstShift.id;
                             }
                         }
-                    });
-                }
+                    }
 
-                // 3. Fill Remaining Gaps (Greedy Equal Dist)
-                for (let d = 1; d <= days; d++) {
-                    // Priority: N -> A -> M
-                    const shifts = [...shiftConfig].sort((a,b) => {
-                         // N=2 (isNight), A=1, M=0 priority
-                         if(a.isNight) return -1;
-                         if(b.isNight) return 1;
-                         return b.price - a.price; 
+                    // 2. Identify Available Staff for Normal Shift (Row 1)
+                    let availableIds = [];
+                    nurses.forEach(n => {
+                        if (n.id === hn?.id) return;
+                        if (NON_WORKING_CODES.includes(schedule[getKey(n.id, 1, d)])) return; 
+                        availableIds.push(n.id);
                     });
 
-                    for (const shift of shifts) {
-                        let current = countDailyTotal(d, shift.label, newSchedule);
-                        while (current < shift.required) {
-                            // Find candidate
-                            let candidates = normalNurses.filter(n => {
-                                if (nurseStats[n.id] >= maxShiftsPerMonth) return false;
-                                if (newSchedule[getKey(n.id, 1, d)] !== '0') return false; // Already working
+                    // 3. Assign Normal Shifts (Row 1)
+                    const shiftsPriority = [...shiftConfig].reverse(); 
+
+                    for (const shift of shiftsPriority) {
+                        let target = shift.required;
+                        let currentCount = (hnShiftId === shift.id) ? 1 : 0;
+
+                        let pool = nurses.filter(n => availableIds.includes(n.id));
+                        pool = pool.filter(n => newSchedule[getKey(n.id, 1, d)] === '0');
+                        pool = getSortedCandidates(pool, shift.id);
+
+                        if (rulesConfig.noNightToMorning && d > 1) {
+                             pool = pool.filter(n => {
+                                 const isMorning = (shift.id === shiftConfig[0].id);
+                                 if (!isMorning) return true;
+                                 
+                                 const prevVal = newSchedule[getKey(n.id, 1, d-1)];
+                                 const prevShift = shiftConfig.find(s => s.label === prevVal);
+                                 return !(prevShift && prevShift.isNight);
+                             });
+                        }
+
+                        for (let n of pool) {
+                            if (currentCount < target) {
+                                newSchedule[getKey(n.id, 1, d)] = shift.label;
+                                nurseStats[n.id][shift.id]++;
+                                nurseStats[n.id].total++;
+                                currentCount++;
+                            }
+                        }
+                    }
+
+                    // 4. FORCE FILL GAPS (OT - Row 0)
+                    for (const shift of shiftConfig) {
+                        const count = countDailyTotal(d, shift.label, newSchedule);
+                        if (count < shift.required) {
+                            let needed = shift.required - count;
+                            
+                            let otCandidates = nurses.filter(n => {
+                                if (newSchedule[getKey(n.id, 0, d)] !== '0') return false;
+                                const myRow1 = newSchedule[getKey(n.id, 1, d)];
+                                if (myRow1 === shift.label) return false;
                                 if (NON_WORKING_CODES.includes(schedule[getKey(n.id, 1, d)])) return false;
-                                
-                                // Rule: No N -> M
-                                if (shift.label === 'ช' && d > 1 && newSchedule[getKey(n.id, 1, d-1)] === 'ด') return false;
-                                
                                 return true;
                             });
 
-                            // Sort by least shifts
-                            candidates.sort((a,b) => nurseStats[a.id] - nurseStats[b.id]);
+                            otCandidates = getSortedCandidates(otCandidates, shift.id);
 
-                            if (candidates.length > 0) {
-                                const n = candidates[0];
-                                newSchedule[getKey(n.id, 1, d)] = shift.label;
-                                nurseStats[n.id]++;
-                                current++;
-                            } else {
-                                break; // No one available (hit limits)
+                            for (let n of otCandidates) {
+                                if (needed > 0) {
+                                    newSchedule[getKey(n.id, 0, d)] = shift.label;
+                                    nurseStats[n.id].total++;
+                                    needed--;
+                                }
                             }
                         }
                     }
@@ -351,13 +322,33 @@
             };
 
             const toggleRule = (key) => {
-                // ... legacy code
+                const newRules = { ...rulesConfig, [key]: !rulesConfig[key] };
+                saveData({ rulesConfig: newRules });
             };
             
             const handleSettingsChange = (idx, field, val) => {
                 const newShifts = [...shiftConfig];
                 newShifts[idx][field] = val;
                 saveData({ shiftConfig: newShifts });
+            };
+
+            const exportExcel = () => {
+                const wb = XLSX.utils.book_new();
+                const days = Array.from({length: getDaysInMonth()}, (_, i) => i + 1);
+                const data = [];
+                data.push(['ลำดับ', 'ชื่อ-สกุล', 'ตำแหน่ง', ...days, 'วันทำการ', 'ค่าเวร', 'รวม OT', 'ค่า OT']);
+                nurses.forEach((n, idx) => {
+                    const s = countStats(n.id);
+                    const row1 = [idx + 1, n.name, n.pos];
+                    days.forEach(d => row1.push(schedule[getKey(n.id, 0, d)] || '0'));
+                    row1.push(s.workDays, s.shiftPay, s.otCount, s.otPay);
+                    const row2 = ['', '', ''];
+                    days.forEach(d => row2.push(schedule[getKey(n.id, 1, d)] || '0'));
+                    data.push(row1, row2);
+                });
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                XLSX.utils.book_append_sheet(wb, ws, "Roster");
+                XLSX.writeFile(wb, `Roster_Force_${currentDate.getMonth()+1}.xlsx`);
             };
 
             const cycleShift = (id, row, day) => {
@@ -374,15 +365,15 @@
                     <div className="bg-white border-b border-gray-200 shadow-sm shrink-0 z-50">
                         <div className="p-3 flex justify-between items-center">
                             <div className="flex items-center gap-4">
-                                <div className="bg-purple-600 text-white p-2 rounded-lg shadow-md">
-                                    <Sliders size={24} />
+                                <div className="bg-red-600 text-white p-2 rounded-lg shadow-md">
+                                    <Zap size={24} />
                                 </div>
                                 <div>
-                                    <h1 className="text-xl font-bold text-gray-800">ตารางเวร v41 <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Pattern & Limit</span></h1>
+                                    <h1 className="text-xl font-bold text-gray-800">ระบบตารางเวร <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">v40.3 Workday</span></h1>
                                     <div className="flex items-center gap-2 text-sm text-gray-500">
-                                        <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} className="hover:text-purple-600"><ChevronLeft size={16}/></button>
+                                        <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} className="hover:text-red-600"><ChevronLeft size={16}/></button>
                                         <span className="font-semibold w-32 text-center">{currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}</span>
-                                        <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))} className="hover:text-purple-600"><ChevronRight size={16}/></button>
+                                        <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))} className="hover:text-red-600"><ChevronRight size={16}/></button>
                                     </div>
                                 </div>
                             </div>
@@ -392,9 +383,12 @@
                                     <Settings size={16} /> <span>ตั้งค่า</span>
                                 </button>
                                 <div className="h-6 w-px bg-gray-300 mx-2"></div>
-                                <button onClick={autoGenerateRoster} disabled={isGenerating} className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1">
+                                <button onClick={autoGenerateRoster} disabled={isGenerating} className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1">
                                     {isGenerating ? <div className="spinner w-4 h-4 border-white"></div> : <Zap size={16} />} 
-                                    <span>จัดเวร (Pattern)</span>
+                                    <span>AUTO (Force)</span>
+                                </button>
+                                <button onClick={exportExcel} className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1">
+                                    <Download size={16} /> <span>Excel</span>
                                 </button>
                                 <button onClick={() => { if(confirm("ล้างข้อมูล?")) saveData({ schedule: {} }); }} className="bg-gray-200 hover:bg-red-500 hover:text-white text-gray-600 px-3 py-2 rounded-lg shadow-sm">
                                     <Eraser size={16} />
@@ -410,7 +404,7 @@
                                     <tr>
                                         <th className="sticky-1 w-[40px]">No.</th>
                                         <th className="sticky-2 w-[160px]">ชื่อ - สกุล</th>
-                                        <th className="sticky-3">สถานะ (Limit {maxShiftsPerMonth})</th>
+                                        <th className="sticky-3 w-[70px]">ตำแหน่ง</th>
                                         {Array.from({ length: getDaysInMonth() }, (_, i) => (
                                             <th key={i} onClick={() => {
                                                 const day = i + 1;
@@ -418,38 +412,41 @@
                                                 saveData({ holidays: newH });
                                             }} className={`min-w-[36px] cursor-pointer hover:bg-gray-200 ${isHoliday(i+1) ? 'bg-red-50 text-red-600' : ''}`}>{i + 1}</th>
                                         ))}
+                                        <th className="bg-blue-50 text-blue-900 border-l-2 border-blue-200 min-w-[60px] px-1">วัน<br/>ทำการ</th>
+                                        <th className="bg-green-50 text-green-900 border-l border-green-200 min-w-[80px] px-1">ค่าเวร<br/>(รวม)</th>
+                                        <th className="bg-orange-50 text-orange-900 border-l-2 border-orange-200 min-w-[60px] px-1">รวม<br/>OT</th>
+                                        <th className="bg-orange-100 text-orange-900 border-l border-orange-200 min-w-[80px] px-1">ค่า OT<br/>({otRate})</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {nurses.map((nurse, idx) => {
                                         const s = countStats(nurse.id);
-                                        const isLimitExceeded = s.totalShifts > maxShiftsPerMonth;
-                                        const isLimitReached = s.totalShifts === maxShiftsPerMonth;
-                                        const limitColor = isLimitExceeded ? 'text-red-600 bg-red-100' : (isLimitReached ? 'text-green-600 bg-green-50' : 'text-gray-500');
-
+                                        const isBalanced = s.workDays === workDayLimit;
+                                        const diff = s.workDays - workDayLimit;
                                         return (
                                             <React.Fragment key={nurse.id}>
                                                 <tr className="border-b-0 hover:bg-gray-50">
                                                     <td rowSpan={2} className="sticky-1 font-bold text-gray-500 bg-white">{idx + 1}</td>
-                                                    <td rowSpan={2} className="sticky-2 text-left px-2 bg-white">
-                                                        <div className="font-bold text-sm">{nurse.name}</div>
-                                                        <div className="text-[10px] text-gray-500 bg-gray-100 px-1 rounded inline-block">{nurse.pos}</div>
-                                                    </td>
-                                                    <td rowSpan={2} className="sticky-3 bg-white border-r-4 border-gray-100 p-1">
-                                                        <div className={`text-xs font-bold px-2 py-1 rounded text-center ${limitColor} mb-1`}>
-                                                            รวม: {s.totalShifts} / {maxShiftsPerMonth}
-                                                        </div>
-                                                        <div className="flex justify-center gap-1 text-[10px]">
-                                                            <span className="bg-green-100 text-green-800 px-1 rounded">ช:{s.breakdown.m}</span>
-                                                            <span className="bg-yellow-100 text-yellow-800 px-1 rounded">บ:{s.breakdown.a}</span>
-                                                            <span className="bg-purple-100 text-purple-800 px-1 rounded">ด:{s.breakdown.n}</span>
-                                                        </div>
-                                                    </td>
+                                                    <td rowSpan={2} className="sticky-2 text-left px-2 bg-white">{nurse.name}</td>
+                                                    <td rowSpan={2} className="sticky-3 font-semibold text-gray-600 bg-white">{nurse.pos}</td>
                                                     {Array.from({ length: getDaysInMonth() }, (_, i) => {
                                                         const d = i + 1;
                                                         const val = schedule[getKey(nurse.id, 0, d)] || '0';
                                                         return <td key={`ot-${d}`} onClick={() => cycleShift(nurse.id, 0, d)} className={`cell-hover text-xs ${val !== '0' ? 'font-bold text-red-600 bg-red-50' : 'text-gray-200'}`}>{val}</td>;
                                                     })}
+                                                    <td rowSpan={2} className={`font-bold text-sm border-l-2 border-blue-200 ${isBalanced ? 'text-green-600 bg-green-50' : 'text-red-500 bg-white'}`}>
+                                                        <div className="flex flex-col items-center justify-center">
+                                                            <span className="text-lg">{s.workDays}</span>
+                                                            {!isBalanced && (
+                                                                <span className="text-[10px] font-normal text-gray-400">
+                                                                    {diff > 0 ? `+${diff}` : diff}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td rowSpan={2} className="bg-green-50 text-gray-800 text-xs border-l border-green-200">{s.shiftPay.toLocaleString()}</td>
+                                                    <td rowSpan={2} className="bg-orange-50 font-bold text-orange-700 border-l-2 border-orange-200">{s.otCount}</td>
+                                                    <td rowSpan={2} className="bg-orange-100 text-orange-800 font-semibold text-xs border-l border-orange-200">{s.otPay.toLocaleString()}</td>
                                                 </tr>
                                                 <tr className="border-b border-gray-300">
                                                     {Array.from({ length: getDaysInMonth() }, (_, i) => {
@@ -474,6 +471,7 @@
                                                 const status = c < target ? 'bg-red-100 text-red-600' : (c > target ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-700');
                                                 return <td key={i} className={status}>{c || '-'}</td>;
                                             })}
+                                            <td colSpan="4" className="bg-gray-100"></td>
                                         </tr>
                                     ))}
                                 </tfoot>
@@ -483,30 +481,82 @@
 
                     {showSettings && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
-                            <div className="bg-white rounded-lg shadow-xl w-[500px]">
+                            <div className="bg-white rounded-lg shadow-xl w-[600px] max-h-[90vh] overflow-y-auto">
                                 <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
                                     <h3 className="text-lg font-bold flex items-center gap-2"><Settings size={20}/> ตั้งค่าระบบ</h3>
                                     <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-black"><X size={20}/></button>
                                 </div>
                                 <div className="p-6 space-y-6">
-                                    <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                                    {/* 4. WORKDAY TARGET (ADDED HERE) */}
+                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                                         <div className="flex justify-between items-center">
-                                            <h4 className="font-bold text-purple-800">1. จำกัดเวร (Max Shift Limit)</h4>
+                                            <h4 className="font-bold text-blue-800">4. เป้าหมายวันทำการ (Work Days)</h4>
                                             <div className="flex items-center gap-2">
-                                                 <span className="text-sm text-purple-600">สูงสุดไม่เกิน:</span>
+                                                 <span className="text-sm text-blue-600">จำนวนวันต่อเดือน:</span>
                                                  <input 
                                                     type="number" 
-                                                    className="w-16 border-2 border-purple-300 rounded px-2 py-1 text-center font-bold text-purple-800"
-                                                    value={maxShiftsPerMonth}
-                                                    onChange={(e) => saveData({ maxLimit: parseInt(e.target.value)||0 })}
+                                                    className="w-16 border-2 border-blue-300 rounded px-2 py-1 text-center font-bold text-blue-800"
+                                                    value={workDayLimit}
+                                                    onChange={(e) => saveData({ limit: parseInt(e.target.value)||0 })}
                                                 />
-                                                 <span className="text-sm text-purple-600">เวร/เดือน</span>
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-blue-600 mt-1">* หากทำไม่ครบ จะแสดงตัวเลขติดลบในช่อง "วันทำการ"</p>
+                                    </div>
+
+                                    <div>
+                                        <div className="flex justify-between items-center border-b pb-1 mb-2">
+                                            <h4 className="font-bold text-gray-700">1. ตั้งค่ากะงาน (Shifts)</h4>
+                                            <button onClick={() => setShiftConfig([...shiftConfig, { id: Date.now().toString(), label: '?', name: 'New', color: getRandomColorClass(), price: 0, required: 2, isNight: false }])} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded flex items-center gap-1 hover:bg-indigo-200 font-bold"><Plus size={12}/> เพิ่ม</button>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {shiftConfig.map((shift, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded border group">
+                                                    <div className={`w-8 h-8 rounded flex items-center justify-center text-xs font-bold ${shift.color}`}>{shift.label}</div>
+                                                    <div className="grid grid-cols-4 gap-2 flex-1">
+                                                        <input className="w-full text-xs border rounded p-1" value={shift.label} onChange={e => handleSettingsChange(idx, 'label', e.target.value)} placeholder="ตัวย่อ" />
+                                                        <input className="w-full text-xs border rounded p-1" value={shift.name} onChange={e => handleSettingsChange(idx, 'name', e.target.value)} placeholder="ชื่อ" />
+                                                        <input type="number" className="w-full text-xs border rounded p-1" value={shift.price} onChange={e => handleSettingsChange(idx, 'price', parseInt(e.target.value)||0)} placeholder="ราคา" />
+                                                        <input type="number" className="w-full text-xs border rounded p-1 font-bold text-blue-600" value={shift.required} onChange={e => handleSettingsChange(idx, 'required', parseInt(e.target.value)||0)} placeholder="เป้าหมาย" />
+                                                    </div>
+                                                    <div className="flex flex-col items-center">
+                                                        <label className="text-[10px] text-gray-500">ดึก?</label>
+                                                        <input type="checkbox" checked={shift.isNight} onChange={e => handleSettingsChange(idx, 'isNight', e.target.checked)} />
+                                                    </div>
+                                                    <button onClick={() => setShiftConfig(shiftConfig.filter((_, i) => i !== idx))} className="text-gray-300 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <h4 className="font-bold text-gray-700 mb-2 border-b pb-1">2. ค่าตอบแทน</h4>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-sm">ค่าเวร OT</span>
+                                                <input type="number" className="border rounded w-20 text-right p-1" value={otRate} onChange={e => saveData({ otRate: parseInt(e.target.value)||0 })} />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-gray-700 mb-2 border-b pb-1">3. กฎเหล็ก</h4>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm">ห้าม ดึก -> เช้า</span>
+                                                    <button onClick={() => toggleRule('noNightToMorning')} className={`w-8 h-4 rounded-full transition-colors ${rulesConfig.noNightToMorning ? 'bg-green-500' : 'bg-gray-300'}`}><div className={`w-3 h-3 bg-white rounded-full shadow transform transition-transform ${rulesConfig.noNightToMorning ? 'translate-x-4' : 'translate-x-1'}`}/></button>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm">ห้ามควงเวรติดกัน</span>
+                                                    <button onClick={() => toggleRule('noConsecutiveDoubles')} className={`w-8 h-4 rounded-full transition-colors ${rulesConfig.noConsecutiveDoubles ? 'bg-green-500' : 'bg-gray-300'}`}><div className={`w-3 h-3 bg-white rounded-full shadow transform transition-transform ${rulesConfig.noConsecutiveDoubles ? 'translate-x-4' : 'translate-x-1'}`}/></button>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm">เกลี่ยเวรเท่ากัน</span>
+                                                    <button onClick={() => toggleRule('equalDistribution')} className={`w-8 h-4 rounded-full transition-colors ${rulesConfig.equalDistribution ? 'bg-green-500' : 'bg-gray-300'}`}><div className={`w-3 h-3 bg-white rounded-full shadow transform transition-transform ${rulesConfig.equalDistribution ? 'translate-x-4' : 'translate-x-1'}`}/></button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="p-4 bg-gray-50 border-t rounded-b-lg flex justify-end">
-                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 bg-purple-600 text-white rounded shadow hover:bg-purple-700 font-bold">บันทึกและปิด</button>
+                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 font-bold">บันทึกและปิด</button>
                                 </div>
                             </div>
                         </div>
