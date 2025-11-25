@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ตารางเวรพยาบาล v40 - L1-L5 Limit 7 Days</title>
+    <title>ตารางเวรพยาบาล v38 - Iron Rules</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="importmap">
     {
@@ -112,15 +112,6 @@
             cursor: pointer; 
         }
 
-        /* Toggle Switch */
-        .toggle-checkbox:checked {
-            right: 0;
-            border-color: #22c55e;
-        }
-        .toggle-checkbox:checked + .toggle-label {
-            background-color: #22c55e;
-        }
-
         /* Loading Spinner */
         @keyframes spin {
             to { transform: rotate(360deg); }
@@ -155,31 +146,39 @@
         import { Download, Calculator, UserPlus, Trash2, ChevronLeft, ChevronRight, Zap, Eraser, Settings, Edit2, Save, X, Info, BarChart3, AlertCircle, Plus } from 'lucide-react';
         import * as XLSX from 'xlsx';
 
-        // --- CONSTANTS & DEFAULTS ---
-        const DEFAULT_SETTINGS = {
-            workDayTarget: 20,
-            otRate: 800,
-            shifts: [
-                { id: 'm', symbol: 'ช', name: 'เช้า', price: 0, target: 5, isNight: false, color: 'bg-green-100 text-green-800 font-bold' },
-                { id: 'a', symbol: 'บ', name: 'บ่าย', price: 360, target: 3, isNight: false, color: 'bg-yellow-100 text-yellow-800 font-bold' },
-                { id: 'n', symbol: 'ด', name: 'ดึก', price: 360, target: 2, isNight: true, color: 'bg-purple-100 text-purple-800 font-bold' }
-            ],
-            rules: {
-                noNightToMorning: true,
-                noDoubleShift: false, 
-                balanceShifts: true,
-                limitSevenDays: true // NEW RULE: Limit 7 consecutive days for L1-L5
-            }
+        // --- CONSTANTS ---
+        const DEFAULT_SHIFT_SETTINGS = [
+            { symbol: 'ช', name: 'เช้า', color: 'bg-green-100 text-green-800', rate: 0, target: 7, enabled: true },
+            { symbol: 'บ', name: 'บ่าย', color: 'bg-yellow-100 text-yellow-800', rate: 360, target: 5, enabled: true },
+            { symbol: 'ด', name: 'ดึก', color: 'bg-purple-100 text-purple-800', rate: 360, target: 4, enabled: true }
+        ];
+
+        const DEFAULT_RATES = { 
+            ot: 800,
+            shift_bd: 360  // ราคาค่าเวร บ่าย/ดึก (แถวล่าง)
         };
 
-        const NON_WORKING_CODES = ['Va', 'ปช','ลากิจ'];
-        const STATIC_STYLES = {
+        const DEFAULT_IRON_RULES = [
+            "ห้ามดึก -> เช้า",
+            "ห้ามควงเวรติดกัน", 
+            "เกลี่ยเวรเท่ากัน",
+            "L1-L5 ห้ามเกิน 7 วัน"
+        ];
+
+        const SHIFT_TYPES = {
             '0':      { label: '0',      color: 'bg-white text-red-300' },
+            'ช':      { label: 'ช',      color: 'bg-green-100 text-green-800 font-bold' },
+            'บ':      { label: 'บ',      color: 'bg-yellow-100 text-yellow-800 font-bold' },
+            'ด':      { label: 'ด',      color: 'bg-purple-100 text-purple-800 font-bold' },
             'Va':     { label: 'Va',     color: 'bg-blue-100 text-blue-800 font-bold text-xs' },
             'ปช':     { label: 'ปช',     color: 'bg-orange-100 text-orange-800 font-bold text-xs' },
             'ลาป่วย': { label: 'ลาป่วย', color: 'bg-red-100 text-red-800 font-bold text-[10px]' },
             'ลากิจ':  { label: 'ลากิจ',  color: 'bg-indigo-100 text-indigo-800 font-bold text-[10px]' }
         };
+        
+        const NON_WORKING_CODES = ['Va', 'ปช','ลากิจ'];
+        const CYCLE_TOP = ['0', 'ช', 'บ', 'ด']; 
+        const CYCLE_BOTTOM = ['0', 'ช', 'บ', 'ด', ...NON_WORKING_CODES];
 
         const INITIAL_NURSES = [
             { id: 1, name: "นางสงบ จันทร์ธรรม", pos: "หนต." },
@@ -194,69 +193,81 @@
             { id: 10, name: "น.ส.สิริรัตน์ บัวประเสริฐ", pos: "L1" }
         ];
 
-        const ToggleSwitch = ({ checked, onChange }) => (
-            <div className="relative inline-block w-10 h-5 align-middle select-none transition duration-200 ease-in">
-                <input 
-                    type="checkbox" 
-                    checked={checked} 
-                    onChange={(e) => onChange(e.target.checked)} 
-                    className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300 checked:border-green-500 checked:right-0 transition-all duration-200"
-                />
-                <label className={`toggle-label block overflow-hidden h-5 rounded-full cursor-pointer transition-colors duration-200 ${checked ? 'bg-green-500' : 'bg-gray-300'}`}></label>
-            </div>
-        );
-
         export default function RosterApp() {
             const [currentDate, setCurrentDate] = useState(new Date());
             const [nurses, setNurses] = useState(INITIAL_NURSES);
             const [schedule, setSchedule] = useState({});
             const [customHolidays, setCustomHolidays] = useState([]);
-            const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-            
+            const [workDayLimit, setWorkDayLimit] = useState(20);
             const [showModal, setShowModal] = useState(false);
-            const [showSettingsModal, setShowSettingsModal] = useState(false);
             const [newNurse, setNewNurse] = useState({ name: '', pos: 'L1' });
             const [customConditions, setCustomConditions] = useState('');
             const [editingNurse, setEditingNurse] = useState(null);
             const [isGenerating, setIsGenerating] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
+            
+            // New state for settings
+            const [shiftSettings, setShiftSettings] = useState(DEFAULT_SHIFT_SETTINGS);
+            const [rates, setRates] = useState(DEFAULT_RATES);
+            const [ironRules, setIronRules] = useState(DEFAULT_IRON_RULES);
 
+            // --- LOCAL STORAGE ---
             useEffect(() => {
-                const savedData = localStorage.getItem('roster_data_v40');
-                const savedNurses = localStorage.getItem('roster_nurses_v40');
-                const savedHolidays = localStorage.getItem('roster_holidays_v40');
-                const savedSettings = localStorage.getItem('roster_settings_v40');
-                const savedConditions = localStorage.getItem('roster_conditions_v40');
+                const savedData = localStorage.getItem('roster_data_v38');
+                const savedNurses = localStorage.getItem('roster_nurses_v38');
+                const savedHolidays = localStorage.getItem('roster_holidays_v38');
+                const savedLimit = localStorage.getItem('roster_limit_v38');
+                const savedConditions = localStorage.getItem('roster_conditions_v38');
+                const savedShiftSettings = localStorage.getItem('roster_shift_settings_v38');
+                const savedRates = localStorage.getItem('roster_rates_v38');
+                const savedIronRules = localStorage.getItem('roster_iron_rules_v38');
                 
                 if (savedData) setSchedule(JSON.parse(savedData));
                 if (savedNurses) setNurses(JSON.parse(savedNurses));
                 if (savedHolidays) setCustomHolidays(JSON.parse(savedHolidays));
-                if (savedSettings) setSettings(JSON.parse(savedSettings));
+                if (savedLimit) setWorkDayLimit(Number(savedLimit));
                 if (savedConditions) setCustomConditions(savedConditions);
+                if (savedShiftSettings) setShiftSettings(JSON.parse(savedShiftSettings));
+                if (savedRates) setRates(JSON.parse(savedRates));
+                if (savedIronRules) setIronRules(JSON.parse(savedIronRules));
             }, []);
 
-            const saveAll = (updatedNurses, updatedSchedule, updatedHolidays, updatedSettings, updatedConditions) => {
+            const saveAll = (updatedNurses, updatedSchedule, updatedHolidays, updatedLimit, updatedConditions, updatedShiftSettings, updatedRates, updatedIronRules) => {
                 if(updatedNurses) {
                     setNurses(updatedNurses);
-                    localStorage.setItem('roster_nurses_v40', JSON.stringify(updatedNurses));
+                    localStorage.setItem('roster_nurses_v38', JSON.stringify(updatedNurses));
                 }
                 if(updatedSchedule) {
                     setSchedule(updatedSchedule);
-                    localStorage.setItem('roster_data_v40', JSON.stringify(updatedSchedule));
+                    localStorage.setItem('roster_data_v38', JSON.stringify(updatedSchedule));
                 }
                 if(updatedHolidays) {
                     setCustomHolidays(updatedHolidays);
-                    localStorage.setItem('roster_holidays_v40', JSON.stringify(updatedHolidays));
+                    localStorage.setItem('roster_holidays_v38', JSON.stringify(updatedHolidays));
                 }
-                if(updatedSettings) {
-                    setSettings(updatedSettings);
-                    localStorage.setItem('roster_settings_v40', JSON.stringify(updatedSettings));
+                if(updatedLimit !== undefined) {
+                    setWorkDayLimit(updatedLimit);
+                    localStorage.setItem('roster_limit_v38', updatedLimit);
                 }
                 if(updatedConditions !== undefined) {
                     setCustomConditions(updatedConditions);
-                    localStorage.setItem('roster_conditions_v40', updatedConditions);
+                    localStorage.setItem('roster_conditions_v38', updatedConditions);
+                }
+                if(updatedShiftSettings) {
+                    setShiftSettings(updatedShiftSettings);
+                    localStorage.setItem('roster_shift_settings_v38', JSON.stringify(updatedShiftSettings));
+                }
+                if(updatedRates) {
+                    setRates(updatedRates);
+                    localStorage.setItem('roster_rates_v38', JSON.stringify(updatedRates));
+                }
+                if(updatedIronRules) {
+                    setIronRules(updatedIronRules);
+                    localStorage.setItem('roster_iron_rules_v38', JSON.stringify(updatedIronRules));
                 }
             };
 
+            // --- HELPERS ---
             const getDaysInMonth = () => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
             const getKey = (id, row, day) => `${id}-${row}-${day}`;
             const isHN = (n) => n.pos && n.pos.includes('หนต');
@@ -266,42 +277,41 @@
                 return [0, 6].includes(d.getDay()) || customHolidays.includes(day);
             };
 
-            const getShiftBySymbol = (symbol) => settings.shifts.find(s => s.symbol === symbol);
-
+            // --- CALCULATION LOGIC ---
             const countStats = (nurseId) => {
                 const days = getDaysInMonth();
-                let otCount = 0;
-                let bdCount = 0;
-                let bdPay = 0;
-                let workDays = 0;
+                let otCount = 0;        // Count from Row 0 (Top)
+                let bdCount = 0;        // Count 'บ', 'ด' from Row 1
+                let workDays = 0;       // Count all valid shifts from Row 1
                 
-                const workingSymbols = settings.shifts.map(s => s.symbol);
-
                 for(let d=1; d<=days; d++) {
                     const valTop = schedule[getKey(nurseId, 0, d)] || '0';
                     const valBot = schedule[getKey(nurseId, 1, d)] || '0';
                     
-                    if (workingSymbols.includes(valTop)) {
+                    // OT Calculation (Top Row Only) - Any Shift in Row 0 counts as OT
+                    if (['ช','บ','ด'].includes(valTop)) {
                         otCount++;
                     }
 
-                    if (workingSymbols.includes(valBot)) {
-                        const shift = getShiftBySymbol(valBot);
-                        if (shift) {
-                             if (shift.price > 0) {
-                                 bdCount++;
-                                 bdPay += shift.price;
-                             }
-                             workDays++;
-                        }
+                    // Shift B/D Calculation (Bottom Row Only) - Count both 'บ' and 'ด'
+                    if (['บ','ด'].includes(valBot)) {
+                        bdCount++;
+                    }
+
+                    // Work Day Calculation (Bottom Row: Valid shifts)
+                    if (['ช','บ','ด'].includes(valBot)) {
+                        workDays++;
                     }
                 }
 
+                // ราคาบ่าย/ดึก = จำนวนเวรบ่ายและดึก * 360
+                const bdPay = bdCount * 360;
+
                 return {
                     otCount,
-                    otPay: otCount * settings.otRate,
+                    otPay: otCount * rates.ot,
                     bdCount,
-                    bdPay,
+                    bdPay: bdPay,  // ใช้การคำนวณใหม่
                     workDays
                 };
             };
@@ -315,14 +325,13 @@
                 return count;
             };
 
-            // --- AUTO GENERATE ---
+            // --- AUTO GENERATE (WITH IRON RULES) ---
             const autoGenerateRoster = async () => {
-                const rules = settings.rules;
-                const confirmMsg = `🎯 ยืนยันการจัดเวร (v40)?\n\n` +
-                                 `• L1-L5 ห้ามเกิน 7 วัน: ${rules.limitSevenDays ? '✅' : '❌'}\n` +
-                                 `• คงค่าเวรเดิม/Va: ✅\n` +
-                                 `• ห้ามดึก->เช้า: ${rules.noNightToMorning ? '✅' : '❌'}\n` +
-                                 `• เกลี่ยเวร: ${rules.balanceShifts ? '✅' : '❌'}\n`;
+                const confirmMsg = `🎯 ยืนยันการจัดเวร (v38 - Iron Rules)?\n\n` +
+                                 `1. กฎเหล็ก: ห้ามดึกต่อเช้า (หลังลงดึก ต้องพัก)\n` +
+                                 `2. กฎเหล็ก: ห้ามควงเวร (เช้า+บ่าย) 2 วันติดกัน\n` +
+                                 `3. เกลี่ยเวร เช้า/บ่าย/ดึก ให้เท่ากัน\n` +
+                                 `4. Staff = 5/3/2 ทุกวัน`;
                 
                 if (!confirm(confirmMsg)) return;
 
@@ -331,94 +340,51 @@
 
                 const days = getDaysInMonth();
                 let newSchedule = { ...schedule };
-                const workingSymbols = settings.shifts.map(s => s.symbol);
                 
-                // 1. Reset logic: Clear ONLY auto-generated working shifts, Keep Va/Pre-set codes
+                // 1. Reset
                 nurses.forEach(n => {
                     for(let d=1; d<=days; d++) {
-                        const keyBot = getKey(n.id, 1, d);
-                        const keyTop = getKey(n.id, 0, d);
-                        const valBot = newSchedule[keyBot];
-                        const valTop = newSchedule[keyTop];
-
-                        // Keep if it is Va, Leave, or any non-working code
-                        if (NON_WORKING_CODES.includes(valBot)) {
-                            // Do nothing, preserve it
-                        } else if (workingSymbols.includes(valBot)) {
-                            newSchedule[keyBot] = '0'; // Reset working shift
-                        }
-
-                        if (workingSymbols.includes(valTop)) {
-                             newSchedule[keyTop] = '0';
-                        }
+                        if(['ช','บ','ด'].includes(newSchedule[getKey(n.id, 1, d)])) newSchedule[getKey(n.id, 1, d)] = '0';
+                        if(['ช','บ','ด'].includes(newSchedule[getKey(n.id, 0, d)])) newSchedule[getKey(n.id, 0, d)] = '0';
                     }
                 });
 
                 let nurseStats = {};
                 nurses.forEach(n => nurseStats[n.id] = { m: 0, a: 0, n: 0, total: 0 });
 
-                // --- Helper: Check Consecutive Days ---
-                const getConsecutiveWorkDays = (nurseId, currentDay) => {
-                    let count = 0;
-                    for (let i = currentDay - 1; i >= 1; i--) {
-                        const k1 = getKey(nurseId, 1, i);
-                        const k0 = getKey(nurseId, 0, i);
-                        // Check if worked EITHER shift
-                        const worked = workingSymbols.includes(newSchedule[k1]) || workingSymbols.includes(newSchedule[k0]);
-                        if (worked) {
-                            count++;
-                        } else {
-                            break;
-                        }
-                    }
-                    return count;
-                };
-
-                const getSortedCandidates = (candidates, shiftId) => {
-                    if (!settings.rules.balanceShifts) return candidates; 
-
+                const getSortedCandidates = (candidates, shiftType) => {
                     return [...candidates].sort((a, b) => {
-                        const typeA = nurseStats[a.id][shiftId] || 0;
-                        const typeB = nurseStats[b.id][shiftId] || 0;
+                        const typeA = nurseStats[a.id][shiftType];
+                        const typeB = nurseStats[b.id][shiftType];
                         if (typeA !== typeB) return typeA - typeB;
                         return nurseStats[a.id].total - nurseStats[b.id].total;
                     });
                 };
 
+                // Helper to check for consecutive double shifts (Iron Rule #2)
                 const wasDoubleYesterday = (nurseId, currentDay) => {
                     if (currentDay <= 1) return false;
                     const k0 = getKey(nurseId, 0, currentDay - 1);
                     const k1 = getKey(nurseId, 1, currentDay - 1);
-                    return (workingSymbols.includes(newSchedule[k0]) && workingSymbols.includes(newSchedule[k1]));
+                    // Double shift means both Top and Bottom rows are working shifts
+                    return (['ช','บ','ด'].includes(newSchedule[k0]) && ['ช','บ','ด'].includes(newSchedule[k1]));
                 };
-
-                const mShift = settings.shifts.find(s => s.symbol === 'ช') || settings.shifts[0];
-                const aShift = settings.shifts.find(s => s.symbol === 'บ') || settings.shifts[1];
-                const nShift = settings.shifts.find(s => s.symbol === 'ด') || settings.shifts[2];
 
                 for (let d = 1; d <= days; d++) {
                     const isRed = isHoliday(d);
-                    const targetM = mShift.target;
-                    const targetA = aShift.target;
-                    const targetN = nShift.target;
+                    const targetM = 5;
+                    const targetA = 3;
+                    const targetN = 2;
 
                     // --- 1. Pre-Assign HN ---
                     const hn = nurses.find(isHN);
                     let hnWorked = false;
                     if (hn) {
-                        const k1 = getKey(hn.id, 1, d);
-                        // Only assign if empty (0) to respect manual overrides
-                        if (!NON_WORKING_CODES.includes(newSchedule[k1]) && newSchedule[k1] === '0') {
-                            if (!isRed) {
-                                newSchedule[k1] = mShift.symbol;
-                                nurseStats[hn.id].m++;
-                                nurseStats[hn.id].total++;
-                                hnWorked = true;
-                            }
-                        } else if (workingSymbols.includes(newSchedule[k1])) {
-                             // Already manually set to a shift
-                             if(newSchedule[k1] === mShift.symbol) hnWorked = true;
-                             nurseStats[hn.id].total++;
+                        if (!isRed && !NON_WORKING_CODES.includes(newSchedule[getKey(hn.id, 1, d)])) {
+                            newSchedule[getKey(hn.id, 1, d)] = 'ช';
+                            nurseStats[hn.id].m++;
+                            nurseStats[hn.id].total++;
+                            hnWorked = true;
                         }
                     }
 
@@ -427,34 +393,11 @@
                     nurses.forEach(n => {
                         if (n.id === hn?.id) return;
                         const k1 = getKey(n.id, 1, d);
-                        
-                        // If pre-assigned (Va, Manual Shift), count stats and skip logic
                         if (NON_WORKING_CODES.includes(newSchedule[k1])) return;
-                        if (workingSymbols.includes(newSchedule[k1])) {
-                             // If manual shift exists, just count it and don't re-assign
-                             // We don't push to availableIds because they are already booked
-                             if(newSchedule[k1] === mShift.symbol) nurseStats[n.id].m++;
-                             if(newSchedule[k1] === aShift.symbol) nurseStats[n.id].a++;
-                             if(newSchedule[k1] === nShift.symbol) nurseStats[n.id].n++;
-                             nurseStats[n.id].total++;
-                             return;
-                        }
-
-                        // IRON RULE #1: No Night -> Morning
-                        if (settings.rules.noNightToMorning) {
-                            if (d > 1 && newSchedule[getKey(n.id, 1, d-1)] === nShift.symbol) return;
-                        }
-
-                        // IRON RULE #NEW: Limit 7 Consecutive Days (L1-L5)
-                        if (settings.rules.limitSevenDays) {
-                            // Check if pos starts with L (L1, L2, L3, L4, L5)
-                            if (['L1','L2','L3','L4','L5'].includes(n.pos)) {
-                                const consecutive = getConsecutiveWorkDays(n.id, d);
-                                if (consecutive >= 7) {
-                                    return; // Must rest today
-                                }
-                            }
-                        }
+                        
+                        // IRON RULE #1: No Night -> Morning (Strict: Post-Night = Off)
+                        // If yesterday was Night, skip today entirely
+                        if (d > 1 && newSchedule[getKey(n.id, 1, d-1)] === 'ด') return;
 
                         availableIds.push(n.id);
                     });
@@ -463,80 +406,59 @@
                     let assignedToday = [];
 
                     // --- 3. Assign Night ---
-                    // Subtract pre-filled slots from target
-                    let currentCountN = countDailyTotal(d, nShift.symbol, newSchedule);
-                    let neededN = targetN - currentCountN;
-                    
-                    if (neededN > 0) {
-                        let nightPool = getSortedCandidates(candidates, 'n');
-                        for (let n of nightPool) {
-                            if (neededN > 0) {
-                                newSchedule[getKey(n.id, 1, d)] = nShift.symbol;
-                                assignedToday.push(n.id);
-                                nurseStats[n.id].n++;
-                                nurseStats[n.id].total++;
-                                neededN--;
-                            }
+                    let nightPool = getSortedCandidates(candidates, 'n');
+                    let countN = 0;
+                    for (let n of nightPool) {
+                        if (countN < targetN) {
+                            newSchedule[getKey(n.id, 1, d)] = 'ด';
+                            assignedToday.push(n.id);
+                            nurseStats[n.id].n++;
+                            nurseStats[n.id].total++;
+                            countN++;
                         }
-                        candidates = candidates.filter(n => !assignedToday.includes(n.id));
                     }
+                    candidates = candidates.filter(n => !assignedToday.includes(n.id));
 
                     // --- 4. Assign Afternoon ---
-                    let currentCountA = countDailyTotal(d, aShift.symbol, newSchedule);
-                    let neededA = targetA - currentCountA;
-
-                    if (neededA > 0) {
-                        let afternoonPool = getSortedCandidates(candidates, 'a');
-                        for (let n of afternoonPool) {
-                            if (neededA > 0) {
-                                newSchedule[getKey(n.id, 1, d)] = aShift.symbol;
-                                assignedToday.push(n.id);
-                                nurseStats[n.id].a++;
-                                nurseStats[n.id].total++;
-                                neededA--;
-                            }
+                    let afternoonPool = getSortedCandidates(candidates, 'a');
+                    let countA = 0;
+                    for (let n of afternoonPool) {
+                        if (countA < targetA) {
+                            newSchedule[getKey(n.id, 1, d)] = 'บ';
+                            assignedToday.push(n.id);
+                            nurseStats[n.id].a++;
+                            nurseStats[n.id].total++;
+                            countA++;
                         }
-                        candidates = candidates.filter(n => !assignedToday.includes(n.id));
                     }
+                    candidates = candidates.filter(n => !assignedToday.includes(n.id));
 
                     // --- 5. Assign Morning ---
-                    let currentCountM = countDailyTotal(d, mShift.symbol, newSchedule);
-                    // HN is usually included in countDailyTotal if assigned above
-                    let neededM = targetM - currentCountM;
-
-                    if (neededM > 0) {
-                        let morningPool = getSortedCandidates(candidates, 'm');
-                        for (let n of morningPool) {
-                            if (neededM > 0) {
-                                newSchedule[getKey(n.id, 1, d)] = mShift.symbol;
-                                assignedToday.push(n.id);
-                                nurseStats[n.id].m++;
-                                nurseStats[n.id].total++;
-                                neededM--;
-                            }
+                    let morningPool = getSortedCandidates(candidates, 'm');
+                    let countM = hnWorked ? 1 : 0;
+                    for (let n of morningPool) {
+                        if (countM < targetM) {
+                            newSchedule[getKey(n.id, 1, d)] = 'ช';
+                            assignedToday.push(n.id);
+                            nurseStats[n.id].m++;
+                            nurseStats[n.id].total++;
+                            countM++;
                         }
                     }
 
-                    // --- 6. Fill Gaps with OT ---
+                    // --- 6. Fill Gaps with OT (Apply Iron Rule #2) ---
                     
-                    // Recount after normal assignments
-                    let finalM = countDailyTotal(d, mShift.symbol, newSchedule);
-                    let finalA = countDailyTotal(d, aShift.symbol, newSchedule);
-
                     // Fill M gap (OT Morning for Afternoon Nurse)
-                    if (finalM < targetM) {
-                        let needed = targetM - finalM;
-                        // Find nurses working Afternoon TODAY
-                        let doublePool = nurses.filter(n => newSchedule[getKey(n.id, 1, d)] === aShift.symbol); 
+                    if (countM < targetM) {
+                        let needed = targetM - countM;
+                        let doublePool = nurses.filter(n => newSchedule[getKey(n.id, 1, d)] === 'บ'); 
                         doublePool = getSortedCandidates(doublePool, 'm');
                         for (let n of doublePool) {
                             if (needed > 0) {
-                                // Double Check manual OT override
-                                if (newSchedule[getKey(n.id, 0, d)] !== '0') continue; // Already has OT
+                                // IRON RULE #2: No Consecutive Double Shifts
+                                if (wasDoubleYesterday(n.id, d)) continue; 
 
-                                if (settings.rules.noDoubleShift && wasDoubleYesterday(n.id, d)) continue; 
-
-                                newSchedule[getKey(n.id, 0, d)] = mShift.symbol;
+                                newSchedule[getKey(n.id, 0, d)] = 'ช';
                                 nurseStats[n.id].total++;
                                 needed--;
                             }
@@ -544,17 +466,16 @@
                     }
 
                     // Fill A gap (OT Afternoon for Morning Nurse)
-                    if (finalA < targetA) {
-                        let needed = targetA - finalA;
-                        let doublePool = nurses.filter(n => newSchedule[getKey(n.id, 1, d)] === mShift.symbol);
+                    if (countA < targetA) {
+                        let needed = targetA - countA;
+                        let doublePool = nurses.filter(n => newSchedule[getKey(n.id, 1, d)] === 'ช');
                         doublePool = getSortedCandidates(doublePool, 'a');
                         for (let n of doublePool) {
                             if (needed > 0) {
-                                if (newSchedule[getKey(n.id, 0, d)] !== '0') continue;
+                                // IRON RULE #2: No Consecutive Double Shifts
+                                if (wasDoubleYesterday(n.id, d)) continue;
 
-                                if (settings.rules.noDoubleShift && wasDoubleYesterday(n.id, d)) continue;
-
-                                newSchedule[getKey(n.id, 0, d)] = aShift.symbol;
+                                newSchedule[getKey(n.id, 0, d)] = 'บ';
                                 nurseStats[n.id].total++;
                                 needed--;
                             }
@@ -566,20 +487,16 @@
                 nurses.forEach(n => {
                     let currentWorkDays = 0;
                     for(let d=1; d<=days; d++) {
-                        if(workingSymbols.includes(newSchedule[getKey(n.id, 1, d)])) currentWorkDays++;
+                        if(['ช','บ','ด'].includes(newSchedule[getKey(n.id, 1, d)])) currentWorkDays++;
                     }
 
-                    let excess = currentWorkDays - settings.workDayTarget;
+                    let excess = currentWorkDays - workDayLimit;
                     if (excess > 0) {
                         for (let d = 1; d <= days && excess > 0; d++) {
                             const k1 = getKey(n.id, 1, d);
                             const k0 = getKey(n.id, 0, d);
-                            // Only flip generated shifts, not manual ones? 
-                            // It's hard to distinguish manual vs auto here without more state. 
-                            // Current logic assumes if we are over limit, we cut back.
-                            // To be safe, we only cut M shifts that have empty OT (standard auto pattern)
-                            if (newSchedule[k1] === mShift.symbol && newSchedule[k0] === '0') {
-                                newSchedule[k0] = mShift.symbol; 
+                            if (newSchedule[k1] === 'ช' && newSchedule[k0] === '0') {
+                                newSchedule[k0] = 'ช'; 
                                 newSchedule[k1] = '0'; 
                                 excess--;
                             }
@@ -588,29 +505,32 @@
                 });
 
                 setSchedule(newSchedule);
-                saveAll(null, newSchedule, null, settings, customConditions);
+                saveAll(null, newSchedule, null, workDayLimit, customConditions, null, null, null);
                 setIsGenerating(false);
+            };
+
+            // --- EVENT HANDLERS ---
+            const handleLimitChange = (e) => {
+                const val = parseInt(e.target.value) || 0;
+                setWorkDayLimit(val);
+                saveAll(null, null, null, val, customConditions, null, null, null);
             };
 
             const toggleHoliday = (day) => {
                 const newHolidays = customHolidays.includes(day) 
                     ? customHolidays.filter(d => d !== day) 
                     : [...customHolidays, day];
-                saveAll(null, null, newHolidays, settings, customConditions);
+                setCustomHolidays(newHolidays);
+                saveAll(null, null, newHolidays, workDayLimit, customConditions, null, null, null);
             };
 
             const cycleShift = (id, row, day) => {
                 const key = getKey(id, row, day);
                 const current = schedule[key] || '0';
-                
-                const workingSymbols = settings.shifts.map(s => s.symbol);
-                const cycleTop = ['0', ...workingSymbols];
-                const cycleBottom = ['0', ...workingSymbols, ...NON_WORKING_CODES];
-                
-                const cycleOrder = (row === 0) ? cycleTop : cycleBottom;
+                const cycleOrder = (row === 0) ? CYCLE_TOP : CYCLE_BOTTOM;
                 const nextIndex = (cycleOrder.indexOf(current) + 1) % cycleOrder.length;
                 const newSchedule = { ...schedule, [key]: cycleOrder[nextIndex] };
-                saveAll(null, newSchedule, null, settings, customConditions);
+                saveAll(null, newSchedule, null, workDayLimit, customConditions, null, null, null);
             };
 
             const handleAddNurse = () => {
@@ -619,64 +539,29 @@
                     return;
                 }
                 const updated = [...nurses, { id: Date.now(), name: newNurse.name, pos: newNurse.pos || 'L1' }];
-                saveAll(updated, null, null, settings, customConditions);
+                saveAll(updated, null, null, workDayLimit, customConditions, null, null, null);
                 setNewNurse({ name: '', pos: 'L1' });
                 setShowModal(false);
             };
 
             const handleDeleteNurse = (id) => {
                 if(confirm(`🗑️ ยืนยันการลบ?`)) {
-                    saveAll(nurses.filter(n => n.id !== id), null, null, settings, customConditions);
+                    saveAll(nurses.filter(n => n.id !== id), null, null, workDayLimit, customConditions, null, null, null);
                 }
             };
 
             const handleSaveEdit = () => {
                 if (!editingNurse.name.trim()) return;
                 const updatedNurses = nurses.map(n => n.id === editingNurse.id ? { ...editingNurse } : n);
-                saveAll(updatedNurses, null, null, settings, customConditions);
+                saveAll(updatedNurses, null, null, workDayLimit, customConditions, null, null, null);
                 setEditingNurse(null);
             };
 
             const clearAllData = () => {
                 if(confirm("⚠️ ล้างข้อมูลเวรทั้งหมด?")) {
                     setSchedule({});
-                    saveAll(null, {}, null, settings, customConditions);
+                    saveAll(null, {}, null, workDayLimit, customConditions, null, null, null);
                 }
-            };
-            
-            const updateSetting = (field, value) => {
-                const newSettings = { ...settings, [field]: value };
-                saveAll(null, null, null, newSettings, customConditions);
-            };
-            
-            const updateRule = (rule, value) => {
-                const newSettings = { ...settings, rules: { ...settings.rules, [rule]: value } };
-                saveAll(null, null, null, newSettings, customConditions);
-            };
-
-            const updateShift = (index, field, value) => {
-                const newShifts = [...settings.shifts];
-                newShifts[index] = { ...newShifts[index], [field]: value };
-                updateSetting('shifts', newShifts);
-            };
-
-            const addShift = () => {
-                const newShift = { 
-                    id: Date.now().toString(), 
-                    symbol: '?', 
-                    name: 'New', 
-                    price: 0, 
-                    target: 1, 
-                    isNight: false, 
-                    color: 'bg-gray-100 text-gray-800' 
-                };
-                updateSetting('shifts', [...settings.shifts, newShift]);
-            };
-
-            const removeShift = (index) => {
-                if (settings.shifts.length <= 1) return;
-                const newShifts = settings.shifts.filter((_, i) => i !== index);
-                updateSetting('shifts', newShifts);
             };
 
             const exportExcel = () => {
@@ -701,12 +586,58 @@
 
                 const ws = XLSX.utils.aoa_to_sheet(data);
                 XLSX.utils.book_append_sheet(wb, ws, "Roster");
-                XLSX.writeFile(wb, `Roster_v40_${currentDate.getMonth()+1}.xlsx`);
+                XLSX.writeFile(wb, `Roster_v38_${currentDate.getMonth()+1}.xlsx`);
+            };
+
+            // Settings handlers
+            const updateShiftSetting = (index, field, value) => {
+                const updated = [...shiftSettings];
+                updated[index] = { ...updated[index], [field]: value };
+                setShiftSettings(updated);
+            };
+
+            const addNewShift = () => {
+                const newShift = { symbol: 'N', name: 'เวรใหม่', color: 'bg-gray-100 text-gray-800', rate: 0, target: 0, enabled: true };
+                setShiftSettings([...shiftSettings, newShift]);
+            };
+
+            const removeShift = (index) => {
+                if (shiftSettings.length <= 1) {
+                    alert('ต้องมีเวรอย่างน้อย 1 เวร');
+                    return;
+                }
+                const updated = shiftSettings.filter((_, i) => i !== index);
+                setShiftSettings(updated);
+            };
+
+            const updateRate = (field, value) => {
+                const updated = { ...rates, [field]: parseInt(value) || 0 };
+                setRates(updated);
+            };
+
+            const updateIronRule = (index, value) => {
+                const updated = [...ironRules];
+                updated[index] = value;
+                setIronRules(updated);
+            };
+
+            const addIronRule = () => {
+                setIronRules([...ironRules, 'กฎใหม่']);
+            };
+
+            const removeIronRule = (index) => {
+                const updated = ironRules.filter((_, i) => i !== index);
+                setIronRules(updated);
+            };
+
+            const saveSettings = () => {
+                saveAll(null, null, null, workDayLimit, customConditions, shiftSettings, rates, ironRules);
+                setShowSettings(false);
             };
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden">
-                    {/* Header */}
+                    {/* 1. Header & Toolbar */}
                     <div className="bg-white border-b border-gray-200 shadow-sm shrink-0 z-50">
                         <div className="p-3 flex justify-between items-center">
                             <div className="flex items-center gap-4">
@@ -714,7 +645,7 @@
                                     <Calculator size={24} />
                                 </div>
                                 <div>
-                                    <h1 className="text-xl font-bold text-gray-800">ระบบตารางเวรพยาบาล <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">v40 Limit L1-L5</span></h1>
+                                    <h1 className="text-xl font-bold text-gray-800">ระบบตารางเวรพยาบาล <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">v38 Iron Rules</span></h1>
                                     <div className="flex items-center gap-2 text-sm text-gray-500">
                                         <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} className="hover:text-blue-600"><ChevronLeft size={16}/></button>
                                         <span className="font-semibold w-32 text-center">{currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}</span>
@@ -723,23 +654,32 @@
                                 </div>
                             </div>
 
+                            {/* 2. Condition Input Area */}
                             <div className="flex-1 mx-6 no-print relative">
                                 <span className="absolute -top-3 left-0 text-[10px] text-gray-500 bg-white px-1">เงื่อนไขพิเศษ / กฎเหล็ก</span>
                                 <textarea
                                     value={customConditions}
-                                    onChange={(e) => saveAll(null, null, null, settings, e.target.value)}
+                                    onChange={(e) => saveAll(null, null, null, workDayLimit, e.target.value, null, null, null)}
                                     className="w-full bg-yellow-50/50 border border-yellow-200 rounded-lg py-2 px-3 text-xs focus:ring-2 focus:ring-yellow-400 focus:outline-none resize-none h-10 transition-all focus:h-20 shadow-sm placeholder-gray-400"
                                     placeholder="เช่น ห้ามเวรดึกติดกัน, L1 ลาพักร้อนวันที่ 15..."
                                 />
                             </div>
 
                             <div className="flex items-center gap-2 no-print">
-                                <button 
-                                    onClick={() => setShowSettingsModal(true)}
-                                    className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg border border-gray-200 transition-colors"
-                                >
-                                    <Settings size={18} />
-                                    <span className="text-sm font-medium">ตั้งค่า</span>
+                                <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">
+                                    <Settings size={14} className="text-gray-500"/>
+                                    <span className="text-xs font-medium text-gray-600">เป้าหมายวันทำการ:</span>
+                                    <input 
+                                        type="number" 
+                                        value={workDayLimit} 
+                                        onChange={handleLimitChange}
+                                        className="w-10 text-center text-sm font-bold bg-white border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                <button onClick={() => setShowSettings(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-transform active:scale-95">
+                                    <Settings size={16} /> 
+                                    <span>ตั้งค่า</span>
                                 </button>
 
                                 <button onClick={autoGenerateRoster} disabled={isGenerating} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-transform active:scale-95">
@@ -764,8 +704,9 @@
                         </div>
                     </div>
 
-                    {/* Table Area */}
+                    {/* 3. Main Table Area */}
                     <div className="flex-1 overflow-auto bg-gray-100 p-4">
+                        {/* Wrapper to handle scrolling - overflow-x-auto enables horizontal scroll */}
                         <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-x-auto max-w-full">
                             <table className="w-full min-w-max">
                                 <thead>
@@ -791,20 +732,22 @@
                                                 </th>
                                             );
                                         })}
+                                        {/* Right Summary Columns - ensured visible via scrolling */}
                                         <th className="bg-blue-50 text-blue-900 border-l-2 border-blue-200 min-w-[60px] px-1">วัน<br/>ทำการ</th>
                                         <th className="bg-yellow-50 text-yellow-900 border-l border-yellow-200 min-w-[60px] px-1">รวม<br/>บ่าย/ดึก</th>
-                                        <th className="bg-green-50 text-green-900 border-l border-green-200 min-w-[70px] px-1">ราคา<br/>เวร</th>
+                                        <th className="bg-green-50 text-green-900 border-l border-green-200 min-w-[70px] px-1">ราคา<br/>(360)</th>
                                         <th className="bg-orange-50 text-orange-900 border-l-2 border-orange-200 min-w-[60px] px-1">รวม<br/>OT</th>
-                                        <th className="bg-orange-100 text-orange-900 border-l border-orange-200 min-w-[70px] px-1">ราคา<br/>({settings.otRate})</th>
+                                        <th className="bg-orange-100 text-orange-900 border-l border-orange-200 min-w-[70px] px-1">ราคา<br/>(800)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {nurses.map((nurse, idx) => {
                                         const s = countStats(nurse.id);
-                                        const isBalanced = s.workDays === settings.workDayTarget;
+                                        const isBalanced = s.workDays === workDayLimit;
                                         
                                         return (
                                             <React.Fragment key={nurse.id}>
+                                                {/* Top Row: OT & Stats */}
                                                 <tr className="border-b-0 hover:bg-gray-50">
                                                     <td rowSpan={2} className="sticky-1 font-bold text-gray-500 bg-white">{idx + 1}</td>
                                                     <td rowSpan={2} className="sticky-2 text-left px-2 bg-white">
@@ -847,6 +790,7 @@
                                                         ) : nurse.pos}
                                                     </td>
                                                     
+                                                    {/* Days (OT Row) */}
                                                     {Array.from({ length: getDaysInMonth() }, (_, i) => {
                                                         const d = i + 1;
                                                         const val = schedule[getKey(nurse.id, 0, d)] || '0';
@@ -861,9 +805,10 @@
                                                         );
                                                     })}
 
+                                                    {/* Stats Columns - Data */}
                                                     <td rowSpan={2} className={`font-bold text-sm border-l-2 border-blue-200 ${isBalanced ? 'text-green-600 bg-green-50' : 'text-red-500 bg-white'}`}>
                                                         {s.workDays}
-                                                        {!isBalanced && <div className="text-[9px] font-normal text-gray-400">{s.workDays - settings.workDayTarget > 0 ? `+${s.workDays - settings.workDayTarget}` : `${s.workDays - settings.workDayTarget}`}</div>}
+                                                        {!isBalanced && <div className="text-[9px] font-normal text-gray-400">{s.workDays - workDayLimit > 0 ? `+${s.workDays - workDayLimit}` : `${s.workDays - workDayLimit}`}</div>}
                                                     </td>
                                                     <td rowSpan={2} className="bg-yellow-50 font-semibold border-l border-yellow-200">{s.bdCount}</td>
                                                     <td rowSpan={2} className="bg-green-50 text-gray-600 text-xs border-l border-green-200">{s.bdPay > 0 ? s.bdPay.toLocaleString() : '-'}</td>
@@ -871,16 +816,12 @@
                                                     <td rowSpan={2} className="bg-orange-100 text-orange-800 font-semibold text-xs border-l border-orange-200">{s.otPay > 0 ? s.otPay.toLocaleString() : '-'}</td>
                                                 </tr>
 
+                                                {/* Bottom Row: Normal Shifts */}
                                                 <tr className="border-b border-gray-300">
                                                     {Array.from({ length: getDaysInMonth() }, (_, i) => {
                                                         const d = i + 1;
                                                         const val = schedule[getKey(nurse.id, 1, d)] || '0';
-                                                        let style = STATIC_STYLES[val];
-                                                        if (!style) {
-                                                            const shift = getShiftBySymbol(val);
-                                                            style = shift ? { label: shift.symbol, color: shift.color } : STATIC_STYLES['0'];
-                                                        }
-
+                                                        const style = SHIFT_TYPES[val] || SHIFT_TYPES['0'];
                                                         return (
                                                             <td 
                                                                 key={`norm-${d}`} 
@@ -897,37 +838,63 @@
                                     })}
                                 </tbody>
                                 <tfoot>
-                                    {settings.shifts.map((shift) => (
-                                        <tr key={`sum-${shift.id}`} className="bg-gray-100 font-bold text-xs text-gray-600 border-t border-gray-300">
-                                            <td colSpan="3" className="sticky-1 text-right pr-2 bg-gray-100 z-40">รวม {shift.name}</td>
-                                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                                                const day = i + 1;
-                                                const c = countDailyTotal(day, shift.symbol);
-                                                const target = shift.target;
-                                                const exactColor = shift.symbol === 'ช' ? 'text-green-700 bg-green-100' : 
-                                                                 (shift.symbol === 'บ' ? 'text-yellow-700 bg-yellow-100' : 'text-purple-700 bg-purple-100');
-                                                const statusColor = c < target ? 'text-red-600 bg-red-100' : (c > target ? 'text-blue-600 bg-blue-100' : exactColor);
-                                                
-                                                return <td key={i} className={statusColor}>{c || '-'}</td>;
-                                            })}
-                                            <td colSpan="5" className="bg-gray-200"></td>
-                                        </tr>
-                                    ))}
+                                    {/* Footer Summary aligned to Day 1 */}
+                                    <tr className="bg-gray-100 font-bold text-xs text-gray-600 border-t-2 border-gray-300">
+                                        <td colSpan="3" className="sticky-1 text-right pr-2 bg-gray-100 z-40">รวม เช้า</td>
+                                        {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                                            const day = i + 1;
+                                            // Count both rows for staffing check (Normal + OT)
+                                            const c = countDailyTotal(day, 'ช');
+                                            // Target Logic: Every day 5
+                                            const target = 5;
+                                            const statusColor = c < target ? 'text-red-600 bg-red-100' : (c > target ? 'text-blue-600 bg-blue-100' : 'text-green-700 bg-green-100');
+                                            
+                                            return <td key={i} className={statusColor}>{c || '-'}</td>;
+                                        })}
+                                        <td colSpan="5" className="bg-gray-200"></td>
+                                    </tr>
+                                    <tr className="bg-gray-100 font-bold text-xs text-gray-600">
+                                        <td colSpan="3" className="sticky-1 text-right pr-2 bg-gray-100 z-40">รวม บ่าย</td>
+                                        {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                                            const day = i + 1;
+                                            const c = countDailyTotal(day, 'บ');
+                                            // Target Logic: Every day 3
+                                            const target = 3;
+                                            const statusColor = c < target ? 'text-red-600 bg-red-100' : (c > target ? 'text-blue-600 bg-blue-100' : 'text-yellow-700 bg-yellow-100');
+                                            
+                                            return <td key={i} className={statusColor}>{c || '-'}</td>;
+                                        })}
+                                        <td colSpan="5" className="bg-gray-200"></td>
+                                    </tr>
+                                    <tr className="bg-gray-100 font-bold text-xs text-gray-600 border-b-2 border-gray-300">
+                                        <td colSpan="3" className="sticky-1 text-right pr-2 bg-gray-100 z-40">รวม ดึก</td>
+                                        {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                                            const day = i + 1;
+                                            const c = countDailyTotal(day, 'ด');
+                                            // Target Logic: Every day 2
+                                            const target = 2;
+                                            const statusColor = c < target ? 'text-red-600 bg-red-100' : (c > target ? 'text-blue-600 bg-blue-100' : 'text-purple-700 bg-purple-100');
+
+                                            return <td key={i} className={statusColor}>{c || '-'}</td>;
+                                        })}
+                                        <td colSpan="5" className="bg-gray-200"></td>
+                                    </tr>
                                 </tfoot>
                             </table>
                         </div>
                     </div>
 
-                    {/* Footer */}
-                    <div className="bg-white p-2 border-t border-gray-200 text-[11px] text-gray-600 flex justify-center gap-4 shrink-0 no-print flex-wrap">
+                    {/* 4. Legend Footer */}
+                    <div className="bg-white p-2 border-t border-gray-200 text-[11px] text-gray-600 flex justify-center gap-4 shrink-0 no-print">
                         <span className="font-bold">สัญลักษณ์:</span>
-                        {settings.shifts.map(s => (
-                            <span key={s.id} className={`px-2 py-0.5 rounded ${s.color}`}>
-                                {s.symbol} ({s.name}) {s.price > 0 ? s.price + '฿' : ''}
-                            </span>
-                        ))}
-                        <span className="px-2 py-0.5 rounded bg-red-50 text-red-600 font-bold border border-red-200">ตัวแดงแถวบน (OT) {settings.otRate}฿</span>
+                        <span className="px-2 py-0.5 rounded bg-green-100 text-green-800">ช (เช้า)</span>
+                        <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">บ (บ่าย) 360฿</span>
+                        <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800">ด (ดึก) 360฿</span>
+                        <span className="px-2 py-0.5 rounded bg-red-50 text-red-600 font-bold border border-red-200">ตัวแดงแถวบน (OT) 800฿</span>
                     </div>
+                    <div className="text-center text-[10px] text-gray-400 font-medium">
+                            พัฒนาโดย พว.วิษณุกรณ์ โอยา (รพ.ชลบุรี)
+                        </div>
 
                     {/* Modals */}
                     {showModal && (
@@ -950,102 +917,118 @@
                         </div>
                     )}
 
-                    {showSettingsModal && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] backdrop-blur-sm">
-                            <div className="bg-white rounded-xl shadow-2xl w-[600px] max-w-full max-h-[90vh] overflow-hidden flex flex-col">
-                                <div className="flex justify-between items-center p-4 border-b">
-                                    <div className="flex items-center gap-2">
-                                        <Settings className="text-gray-700" size={20} />
-                                        <h2 className="text-lg font-bold text-gray-800">ตั้งค่าระบบ</h2>
+                    {/* Settings Modal */}
+                    {showSettings && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+                            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                                <div className="p-6 border-b border-gray-200">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="text-xl font-bold text-gray-800">การตั้งค่าระบบตารางเวร</h3>
+                                        <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-gray-700">
+                                            <X size={24} />
+                                        </button>
                                     </div>
-                                    <button onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-red-500">
-                                        <X size={20} />
-                                    </button>
                                 </div>
-
-                                <div className="p-6 overflow-y-auto space-y-6 bg-gray-50 flex-1">
-                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <h3 className="font-bold text-blue-900 text-sm">4. เป้าหมายวันทำการ (Work Days)</h3>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm text-blue-800">จำนวนวันต่อเดือน:</span>
-                                                <input 
-                                                    type="number" 
-                                                    value={settings.workDayTarget}
-                                                    onChange={(e) => updateSetting('workDayTarget', parseInt(e.target.value) || 0)}
-                                                    className="w-16 border border-blue-300 rounded px-2 py-1 text-center font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none"
-                                                />
-                                            </div>
+                                
+                                <div className="p-6 space-y-6">
+                                    {/* 1. Work Day Target */}
+                                    <div className="bg-blue-50 p-4 rounded-lg">
+                                        <h4 className="text-lg font-semibold text-blue-800 mb-3">1. เป้าหมายวันทำการ</h4>
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-sm font-medium text-gray-700">จำนวนวันทำการเป้าหมาย:</span>
+                                            <input 
+                                                type="number" 
+                                                value={workDayLimit} 
+                                                onChange={handleLimitChange}
+                                                className="w-20 text-center text-sm font-bold bg-white border border-gray-300 rounded px-3 py-1 focus:ring-2 focus:ring-blue-500"
+                                            />
+                                            <span className="text-xs text-gray-500">* หากทำไม่ครบจะแสดงตัวเลขติดลบในช่อง "วันทำการ"</span>
                                         </div>
-                                        <p className="text-xs text-blue-600">* หากทำไม่ครบ จะแสดงตัวเลขติดลบในช่อง "วันทำการ"</p>
+                                        <div className="mt-2 text-sm text-gray-600">
+                                            <span className="font-medium">จำนวนวันต่อเดือน: {getDaysInMonth()}</span>
+                                        </div>
                                     </div>
 
-                                    <div>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <h3 className="font-bold text-gray-700">1. ตั้งค่ากะงาน (Shifts)</h3>
-                                            <button onClick={addShift} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-100 flex items-center gap-1">
-                                                <Plus size={12}/> เพิ่ม
+                                    {/* 2. Shift Settings */}
+                                    <div className="bg-green-50 p-4 rounded-lg">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h4 className="text-lg font-semibold text-green-800">2. รายละเอียดเวร (Shifts)</h4>
+                                            <button 
+                                                onClick={addNewShift}
+                                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+                                            >
+                                                <Plus size={16} />
+                                                เพิ่มเวร
                                             </button>
                                         </div>
-                                        <div className="bg-white border rounded-lg overflow-hidden">
-                                            <table className="w-full text-sm text-left">
-                                                <thead className="bg-gray-100 text-gray-600 font-medium text-xs uppercase">
-                                                    <tr>
-                                                        <th className="px-3 py-2">สี</th>
-                                                        <th className="px-3 py-2">สัญลักษณ์</th>
-                                                        <th className="px-3 py-2">ชื่อ</th>
-                                                        <th className="px-3 py-2 w-20">ราคา</th>
-                                                        <th className="px-3 py-2 w-16">เป้า</th>
-                                                        <th className="px-3 py-2 text-center">ดึก?</th>
-                                                        <th className="px-3 py-2"></th>
+                                        
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="bg-green-100">
+                                                        <th className="p-2 text-left">สี</th>
+                                                        <th className="p-2 text-left">สัญลักษณ์</th>
+                                                        <th className="p-2 text-left">ชื่อ</th>
+                                                        <th className="p-2 text-center">ราคา</th>
+                                                        <th className="p-2 text-center">เป้า</th>
+                                                        <th className="p-2 text-center">ใช้งาน</th>
+                                                        <th className="p-2 text-center">จัดการ</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-gray-100">
-                                                    {settings.shifts.map((shift, idx) => (
-                                                        <tr key={shift.id}>
-                                                            <td className="px-3 py-2">
-                                                                <div className={`w-6 h-6 rounded ${shift.color} border border-gray-200 shadow-sm`}></div>
+                                                <tbody>
+                                                    {shiftSettings.map((shift, index) => (
+                                                        <tr key={index} className="border-b border-green-200">
+                                                            <td className="p-2">
+                                                                <div className={`w-6 h-6 rounded ${shift.color}`}></div>
                                                             </td>
-                                                            <td className="px-3 py-2">
+                                                            <td className="p-2">
                                                                 <input 
-                                                                    className="w-10 border rounded px-1 py-0.5 text-center font-bold"
+                                                                    type="text" 
                                                                     value={shift.symbol}
-                                                                    onChange={(e) => updateShift(idx, 'symbol', e.target.value)}
+                                                                    onChange={(e) => updateShiftSetting(index, 'symbol', e.target.value)}
+                                                                    className="w-12 text-center border rounded px-1"
+                                                                    maxLength={2}
                                                                 />
                                                             </td>
-                                                            <td className="px-3 py-2">
+                                                            <td className="p-2">
                                                                 <input 
-                                                                    className="w-full border rounded px-2 py-0.5"
+                                                                    type="text" 
                                                                     value={shift.name}
-                                                                    onChange={(e) => updateShift(idx, 'name', e.target.value)}
+                                                                    onChange={(e) => updateShiftSetting(index, 'name', e.target.value)}
+                                                                    className="w-32 border rounded px-2 py-1"
                                                                 />
                                                             </td>
-                                                            <td className="px-3 py-2">
+                                                            <td className="p-2 text-center">
                                                                 <input 
-                                                                    type="number"
-                                                                    className="w-16 border rounded px-1 py-0.5 text-right"
-                                                                    value={shift.price}
-                                                                    onChange={(e) => updateShift(idx, 'price', parseInt(e.target.value) || 0)}
+                                                                    type="number" 
+                                                                    value={shift.rate}
+                                                                    onChange={(e) => updateShiftSetting(index, 'rate', parseInt(e.target.value) || 0)}
+                                                                    className="w-20 text-center border rounded px-1"
                                                                 />
+                                                                <span className="ml-1">฿</span>
                                                             </td>
-                                                            <td className="px-3 py-2">
+                                                            <td className="p-2 text-center">
                                                                 <input 
-                                                                    type="number"
-                                                                    className="w-12 border rounded px-1 py-0.5 text-center text-blue-600 font-bold"
+                                                                    type="number" 
                                                                     value={shift.target}
-                                                                    onChange={(e) => updateShift(idx, 'target', parseInt(e.target.value) || 0)}
+                                                                    onChange={(e) => updateShiftSetting(index, 'target', parseInt(e.target.value) || 0)}
+                                                                    className="w-16 text-center border rounded px-1"
                                                                 />
                                                             </td>
-                                                            <td className="px-3 py-2 text-center">
+                                                            <td className="p-2 text-center">
                                                                 <input 
-                                                                    type="checkbox"
-                                                                    className="w-4 h-4 rounded text-blue-600"
-                                                                    checked={shift.isNight}
-                                                                    onChange={(e) => updateShift(idx, 'isNight', e.target.checked)}
+                                                                    type="checkbox" 
+                                                                    checked={shift.enabled}
+                                                                    onChange={(e) => updateShiftSetting(index, 'enabled', e.target.checked)}
+                                                                    className="w-4 h-4"
                                                                 />
                                                             </td>
-                                                            <td className="px-3 py-2 text-right">
-                                                                <button onClick={() => removeShift(idx)} className="text-gray-400 hover:text-red-500">
+                                                            <td className="p-2 text-center">
+                                                                <button 
+                                                                    onClick={() => removeShift(index)}
+                                                                    className="text-red-500 hover:text-red-700"
+                                                                    disabled={shiftSettings.length <= 1}
+                                                                >
                                                                     <Trash2 size={16} />
                                                                 </button>
                                                             </td>
@@ -1056,68 +1039,71 @@
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div>
-                                            <h3 className="font-bold text-gray-700 mb-2">2. ค่าตอบแทน</h3>
-                                            <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm text-gray-600">ค่าเวร OT</span>
-                                                    <div className="relative">
-                                                        <input 
-                                                            type="number" 
-                                                            value={settings.otRate}
-                                                            onChange={(e) => updateSetting('otRate', parseInt(e.target.value) || 0)}
-                                                            className="w-24 border border-gray-300 rounded px-2 py-1 pr-6 text-right font-medium"
-                                                        />
-                                                        <span className="absolute right-2 top-1.5 text-xs text-gray-400">฿</span>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                    {/* 3. Compensation */}
+                                    <div className="bg-yellow-50 p-4 rounded-lg">
+                                        <h4 className="text-lg font-semibold text-yellow-800 mb-3">3. ค่าตอบแทน</h4>
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-sm font-medium text-gray-700">ค่าเวร OT:</span>
+                                            <input 
+                                                type="number" 
+                                                value={rates.ot}
+                                                onChange={(e) => updateRate('ot', e.target.value)}
+                                                className="w-24 text-center text-sm font-bold bg-white border border-gray-300 rounded px-3 py-1 focus:ring-2 focus:ring-yellow-500"
+                                            />
+                                            <span className="text-sm">บาท</span>
                                         </div>
-
-                                        <div>
-                                            <h3 className="font-bold text-gray-700 mb-2">3. กฎเหล็ก</h3>
-                                            <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-3">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm text-gray-600">ห้าม ดึก -> เช้า</span>
-                                                    <ToggleSwitch 
-                                                        checked={settings.rules.noNightToMorning} 
-                                                        onChange={(val) => updateRule('noNightToMorning', val)} 
-                                                    />
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm text-gray-600">ห้ามควงเวรติดกัน</span>
-                                                    <ToggleSwitch 
-                                                        checked={settings.rules.noDoubleShift} 
-                                                        onChange={(val) => updateRule('noDoubleShift', val)} 
-                                                    />
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm text-gray-600">เกลี่ยเวรเท่ากัน</span>
-                                                    <ToggleSwitch 
-                                                        checked={settings.rules.balanceShifts} 
-                                                        onChange={(val) => updateRule('balanceShifts', val)} 
-                                                    />
-                                                </div>
-                                                <div className="flex justify-between items-center border-t pt-2 mt-2">
-                                                    <span className="text-sm text-red-600 font-medium">L1-L5 ห้ามเกิน 7 วัน</span>
-                                                    <ToggleSwitch 
-                                                        checked={settings.rules.limitSevenDays} 
-                                                        onChange={(val) => updateRule('limitSevenDays', val)} 
-                                                    />
-                                                </div>
-                                            </div>
+                                        <div className="mt-2 text-sm text-gray-600">
+                                            <span className="font-medium">ค่าเวรบ่าย/ดึก: 360 บาท (คงที่)</span>
                                         </div>
                                     </div>
 
+                                    {/* 4. Iron Rules */}
+                                    <div className="bg-red-50 p-4 rounded-lg">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h4 className="text-lg font-semibold text-red-800">4. กฎเหล็ก</h4>
+                                            <button 
+                                                onClick={addIronRule}
+                                                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+                                            >
+                                                <Plus size={16} />
+                                                เพิ่มกฎ
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="space-y-2">
+                                            {ironRules.map((rule, index) => (
+                                                <div key={index} className="flex items-center gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        value={rule}
+                                                        onChange={(e) => updateIronRule(index, e.target.value)}
+                                                        className="flex-1 border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500"
+                                                    />
+                                                    <button 
+                                                        onClick={() => removeIronRule(index)}
+                                                        className="text-red-500 hover:text-red-700 p-2"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="p-4 border-t bg-gray-50 flex justify-end">
+                                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
                                     <button 
-                                        onClick={() => setShowSettingsModal(false)}
-                                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow-sm transition-transform active:scale-95"
+                                        onClick={() => setShowSettings(false)}
+                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
                                     >
-                                        บันทึกและปิด
+                                        ยกเลิก
+                                    </button>
+                                    <button 
+                                        onClick={saveSettings}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                                    >
+                                        <Save size={16} />
+                                        บันทึกการตั้งค่า
                                     </button>
                                 </div>
                             </div>
