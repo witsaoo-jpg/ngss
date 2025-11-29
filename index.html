@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ตารางเวรพยาบาล v38 - Iron Rules</title>
+    <title>ตารางเวรพยาบาล v40 - Full Settings UI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="importmap">
     {
@@ -36,7 +37,7 @@
         table { 
             border-spacing: 0;
             width: 100%;
-            border-collapse: separate; /* Fix for sticky borders */
+            border-collapse: separate;
         }
         
         th, td {
@@ -49,82 +50,19 @@
             box-sizing: border-box;
         }
 
-        /* Sticky Columns Left */
-        .sticky-1 { 
-            position: sticky; 
-            left: 0; 
-            width: 40px; 
-            min-width: 40px; 
-            background-color: white; 
-            z-index: 35; 
-            border-right: 1px solid #e2e8f0;
-        }
+        /* Sticky Columns */
+        .sticky-1 { position: sticky; left: 0; width: 40px; min-width: 40px; background-color: white; z-index: 35; border-right: 1px solid #e2e8f0; }
+        .sticky-2 { position: sticky; left: 40px; width: 160px; min-width: 160px; background-color: white; z-index: 35; border-right: 1px solid #e2e8f0; }
+        .sticky-3 { position: sticky; left: 200px; width: 70px; min-width: 70px; background-color: white; border-right: 3px solid #cbd5e1; box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.1); z-index: 35; }
         
-        .sticky-2 { 
-            position: sticky; 
-            left: 40px; 
-            width: 160px; 
-            min-width: 160px; 
-            background-color: white; 
-            z-index: 35; 
-            border-right: 1px solid #e2e8f0;
-        }
-        
-        .sticky-3 { 
-            position: sticky; 
-            left: 200px; 
-            width: 70px; 
-            min-width: 70px; 
-            background-color: white; 
-            border-right: 3px solid #cbd5e1; 
-            box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.1); 
-            z-index: 35; 
-        }
-        
-        thead tr th { 
-            position: sticky; 
-            top: 0; 
-            z-index: 40; 
-            background-color: #f1f5f9; 
-            color: #334155;
-            height: 50px;
-        }
-        
-        thead tr th.sticky-1, 
-        thead tr th.sticky-2, 
-        thead tr th.sticky-3 { 
-            z-index: 50; 
-            background-color: #f8fafc;
-        }
+        thead tr th { position: sticky; top: 0; z-index: 40; background-color: #f1f5f9; color: #334155; height: 50px; }
+        thead tr th.sticky-1, thead tr th.sticky-2, thead tr th.sticky-3 { z-index: 50; background-color: #f8fafc; }
 
-        .cell-hover:hover { 
-            filter: brightness(0.95); 
-            cursor: pointer; 
-            transform: scale(1.1);
-            transition: transform 0.1s;
-            z-index: 10;
-            position: relative;
-            box-shadow: 0 0 5px rgba(0,0,0,0.2);
-        }
-        
-        .header-hover:hover { 
-            background-color: #e2e8f0; 
-            cursor: pointer; 
-        }
+        .cell-hover:hover { filter: brightness(0.95); cursor: pointer; transform: scale(1.1); transition: transform 0.1s; z-index: 10; position: relative; box-shadow: 0 0 5px rgba(0,0,0,0.2); }
+        .header-hover:hover { background-color: #e2e8f0; cursor: pointer; }
 
-        /* Loading Spinner */
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #0ea5e9;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #0ea5e9; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
 
         @media print {
             .no-print { display: none !important; }
@@ -143,43 +81,10 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Download, Calculator, UserPlus, Trash2, ChevronLeft, ChevronRight, Zap, Eraser, Settings, Edit2, Save, X, Info, BarChart3, AlertCircle, Plus } from 'lucide-react';
+        import { Download, Calculator, UserPlus, Trash2, ChevronLeft, ChevronRight, Zap, Eraser, Settings, Edit2, Save, X, Plus, AlertCircle } from 'lucide-react';
         import * as XLSX from 'xlsx';
 
-        // --- CONSTANTS ---
-        const DEFAULT_SHIFT_SETTINGS = [
-            { symbol: 'ช', name: 'เช้า', color: 'bg-green-100 text-green-800', rate: 0, target: 7, enabled: true },
-            { symbol: 'บ', name: 'บ่าย', color: 'bg-yellow-100 text-yellow-800', rate: 360, target: 5, enabled: true },
-            { symbol: 'ด', name: 'ดึก', color: 'bg-purple-100 text-purple-800', rate: 360, target: 4, enabled: true }
-        ];
-
-        const DEFAULT_RATES = { 
-            ot: 800,
-            shift_bd: 360  // ราคาค่าเวร บ่าย/ดึก (แถวล่าง)
-        };
-
-        const DEFAULT_IRON_RULES = [
-            "ห้ามดึก -> เช้า",
-            "ห้ามควงเวรติดกัน", 
-            "เกลี่ยเวรเท่ากัน",
-            "L1-L5 ห้ามเกิน 7 วัน"
-        ];
-
-        const SHIFT_TYPES = {
-            '0':      { label: '0',      color: 'bg-white text-red-300' },
-            'ช':      { label: 'ช',      color: 'bg-green-100 text-green-800 font-bold' },
-            'บ':      { label: 'บ',      color: 'bg-yellow-100 text-yellow-800 font-bold' },
-            'ด':      { label: 'ด',      color: 'bg-purple-100 text-purple-800 font-bold' },
-            'Va':     { label: 'Va',     color: 'bg-blue-100 text-blue-800 font-bold text-xs' },
-            'ปช':     { label: 'ปช',     color: 'bg-orange-100 text-orange-800 font-bold text-xs' },
-            'ลาป่วย': { label: 'ลาป่วย', color: 'bg-red-100 text-red-800 font-bold text-[10px]' },
-            'ลากิจ':  { label: 'ลากิจ',  color: 'bg-indigo-100 text-indigo-800 font-bold text-[10px]' }
-        };
-        
-        const NON_WORKING_CODES = ['ปช','ลากิจ']; // เอา Va ออกเพราะนับเป็นวันทำการ
-        const CYCLE_TOP = ['0', 'ช', 'บ', 'ด']; 
-        const CYCLE_BOTTOM = ['0', 'ช', 'บ', 'ด', 'Va', ...NON_WORKING_CODES];
-
+        // --- CONSTANTS & INITIAL DATA ---
         const INITIAL_NURSES = [
             { id: 1, name: "นางสงบ จันทร์ธรรม", pos: "หนต." },
             { id: 2, name: "นายวิษณุกรณ์ โอยา", pos: "L5" },
@@ -193,77 +98,81 @@
             { id: 10, name: "น.ส.สิริรัตน์ บัวประเสริฐ", pos: "L1" }
         ];
 
+        const DEFAULT_RULES = [
+            "ห้ามดึก -> เช้า",
+            "ห้ามควงเวรติดกัน",
+            "เกลี่ยเวรเท่ากัน",
+            "L1-L5 ห้ามเกิน 7 วัน",
+            "วันหยุดจัดเวรเช้า 4 คน เวรบ่าย 3 คน เวรดึก 2 คน",
+            "ห้าม เช้าบ่าย สองวันติด"
+        ];
+
+        const SHIFT_METADATA = {
+            '0':      { label: '0',      color: 'bg-white text-red-300' },
+            'ช':      { label: 'ช',      color: 'bg-green-100 text-green-800 font-bold' },
+            'บ':      { label: 'บ',      color: 'bg-yellow-100 text-yellow-800 font-bold' },
+            'ด':      { label: 'ด',      color: 'bg-purple-100 text-purple-800 font-bold' },
+            'Va':     { label: 'Va',     color: 'bg-blue-100 text-blue-800 font-bold text-xs' },
+            'ปช':     { label: 'ปช',     color: 'bg-orange-100 text-orange-800 font-bold text-xs' },
+            'ลาป่วย': { label: 'ลาป่วย', color: 'bg-red-100 text-red-800 font-bold text-[10px]' },
+            'ลากิจ':  { label: 'ลากิจ',  color: 'bg-indigo-100 text-indigo-800 font-bold text-[10px]' }
+        };
+
+        const NON_WORKING_CODES = ['Va', 'ปช','ลากิจ', 'ลาป่วย'];
+        const CYCLE_TOP = ['0', 'ช', 'บ', 'ด']; 
+        const CYCLE_BOTTOM = ['0', 'ช', 'บ', 'ด', ...NON_WORKING_CODES];
+
         export default function RosterApp() {
+            // --- STATE ---
             const [currentDate, setCurrentDate] = useState(new Date());
             const [nurses, setNurses] = useState(INITIAL_NURSES);
             const [schedule, setSchedule] = useState({});
             const [customHolidays, setCustomHolidays] = useState([]);
-            const [workDayLimit, setWorkDayLimit] = useState(20);
-            const [showModal, setShowModal] = useState(false);
+            
+            // Settings State
+            const [config, setConfig] = useState({
+                workDayLimit: 20,
+                otRate: 800,
+                shiftRates: { 'ช': 0, 'บ': 360, 'ด': 360 }, // Rate per shift
+                shiftTargets: { 'ช': 5, 'บ': 3, 'ด': 2 }, // Target staff per shift
+                rules: DEFAULT_RULES
+            });
+
+            const [showSettingsModal, setShowSettingsModal] = useState(false);
+            const [showAddNurseModal, setShowAddNurseModal] = useState(false);
             const [newNurse, setNewNurse] = useState({ name: '', pos: 'L1' });
-            const [customConditions, setCustomConditions] = useState('');
             const [editingNurse, setEditingNurse] = useState(null);
             const [isGenerating, setIsGenerating] = useState(false);
-            const [showSettings, setShowSettings] = useState(false);
-            
-            // New state for settings
-            const [shiftSettings, setShiftSettings] = useState(DEFAULT_SHIFT_SETTINGS);
-            const [rates, setRates] = useState(DEFAULT_RATES);
-            const [ironRules, setIronRules] = useState(DEFAULT_IRON_RULES);
 
             // --- LOCAL STORAGE ---
             useEffect(() => {
-                const savedData = localStorage.getItem('roster_data_v38');
-                const savedNurses = localStorage.getItem('roster_nurses_v38');
-                const savedHolidays = localStorage.getItem('roster_holidays_v38');
-                const savedLimit = localStorage.getItem('roster_limit_v38');
-                const savedConditions = localStorage.getItem('roster_conditions_v38');
-                const savedShiftSettings = localStorage.getItem('roster_shift_settings_v38');
-                const savedRates = localStorage.getItem('roster_rates_v38');
-                const savedIronRules = localStorage.getItem('roster_iron_rules_v38');
+                const savedData = localStorage.getItem('roster_data_v40');
+                const savedNurses = localStorage.getItem('roster_nurses_v40');
+                const savedHolidays = localStorage.getItem('roster_holidays_v40');
+                const savedConfig = localStorage.getItem('roster_config_v40');
                 
                 if (savedData) setSchedule(JSON.parse(savedData));
                 if (savedNurses) setNurses(JSON.parse(savedNurses));
                 if (savedHolidays) setCustomHolidays(JSON.parse(savedHolidays));
-                if (savedLimit) setWorkDayLimit(Number(savedLimit));
-                if (savedConditions) setCustomConditions(savedConditions);
-                if (savedShiftSettings) setShiftSettings(JSON.parse(savedShiftSettings));
-                if (savedRates) setRates(JSON.parse(savedRates));
-                if (savedIronRules) setIronRules(JSON.parse(savedIronRules));
+                if (savedConfig) setConfig(JSON.parse(savedConfig));
             }, []);
 
-            const saveAll = (updatedNurses, updatedSchedule, updatedHolidays, updatedLimit, updatedConditions, updatedShiftSettings, updatedRates, updatedIronRules) => {
+            const saveAll = (updatedNurses, updatedSchedule, updatedHolidays, updatedConfig) => {
                 if(updatedNurses) {
                     setNurses(updatedNurses);
-                    localStorage.setItem('roster_nurses_v38', JSON.stringify(updatedNurses));
+                    localStorage.setItem('roster_nurses_v40', JSON.stringify(updatedNurses));
                 }
                 if(updatedSchedule) {
                     setSchedule(updatedSchedule);
-                    localStorage.setItem('roster_data_v38', JSON.stringify(updatedSchedule));
+                    localStorage.setItem('roster_data_v40', JSON.stringify(updatedSchedule));
                 }
                 if(updatedHolidays) {
                     setCustomHolidays(updatedHolidays);
-                    localStorage.setItem('roster_holidays_v38', JSON.stringify(updatedHolidays));
+                    localStorage.setItem('roster_holidays_v40', JSON.stringify(updatedHolidays));
                 }
-                if(updatedLimit !== undefined) {
-                    setWorkDayLimit(updatedLimit);
-                    localStorage.setItem('roster_limit_v38', updatedLimit);
-                }
-                if(updatedConditions !== undefined) {
-                    setCustomConditions(updatedConditions);
-                    localStorage.setItem('roster_conditions_v38', updatedConditions);
-                }
-                if(updatedShiftSettings) {
-                    setShiftSettings(updatedShiftSettings);
-                    localStorage.setItem('roster_shift_settings_v38', JSON.stringify(updatedShiftSettings));
-                }
-                if(updatedRates) {
-                    setRates(updatedRates);
-                    localStorage.setItem('roster_rates_v38', JSON.stringify(updatedRates));
-                }
-                if(updatedIronRules) {
-                    setIronRules(updatedIronRules);
-                    localStorage.setItem('roster_iron_rules_v38', JSON.stringify(updatedIronRules));
+                if(updatedConfig) {
+                    setConfig(updatedConfig);
+                    localStorage.setItem('roster_config_v40', JSON.stringify(updatedConfig));
                 }
             };
 
@@ -280,38 +189,34 @@
             // --- CALCULATION LOGIC ---
             const countStats = (nurseId) => {
                 const days = getDaysInMonth();
-                let otCount = 0;        // Count from Row 0 (Top)
-                let bdCount = 0;        // Count 'บ', 'ด' from Row 1
-                let workDays = 0;       // Count all valid shifts from Row 1
+                let otCount = 0;
+                let bdCount = 0;
+                let bdPay = 0;
+                let workDays = 0;
                 
                 for(let d=1; d<=days; d++) {
                     const valTop = schedule[getKey(nurseId, 0, d)] || '0';
                     const valBot = schedule[getKey(nurseId, 1, d)] || '0';
                     
-                    // OT Calculation (Top Row Only) - Any Shift in Row 0 counts as OT
+                    // OT Calculation (Row 0)
                     if (['ช','บ','ด'].includes(valTop)) {
                         otCount++;
                     }
 
-                    // Shift B/D Calculation (Bottom Row Only) - Count both 'บ' and 'ด'
-                    if (['บ','ด'].includes(valBot)) {
-                        bdCount++;
-                    }
-
-                    // Work Day Calculation (Bottom Row: Valid shifts) - รวม Va ด้วย
-                    if (['ช','บ','ด','Va'].includes(valBot)) {
+                    // Work Day & BD Pay (Row 1)
+                    if (['ช','บ','ด'].includes(valBot)) {
                         workDays++;
+                        // Calculate specific pay based on shift type
+                        bdPay += (config.shiftRates[valBot] || 0);
+                        if (['บ','ด'].includes(valBot)) bdCount++;
                     }
                 }
 
-                // ราคาบ่าย/ดึก = จำนวนเวรบ่ายและดึก * 360
-                const bdPay = bdCount * 360;
-
                 return {
                     otCount,
-                    otPay: otCount * rates.ot,
+                    otPay: otCount * config.otRate,
                     bdCount,
-                    bdPay: bdPay,  // ใช้การคำนวณใหม่
+                    bdPay,
                     workDays
                 };
             };
@@ -325,14 +230,9 @@
                 return count;
             };
 
-            // --- AUTO GENERATE (WITH IRON RULES) ---
+            // --- AUTO GENERATE (Uses Config Targets) ---
             const autoGenerateRoster = async () => {
-                const confirmMsg = `🎯 ยืนยันการจัดเวร (v38 - Iron Rules)?\n\n` +
-                                 `1. กฎเหล็ก: ห้ามดึกต่อเช้า (หลังลงดึก ต้องพัก)\n` +
-                                 `2. กฎเหล็ก: ห้ามควงเวร (เช้า+บ่าย) 2 วันติดกัน\n` +
-                                 `3. เกลี่ยเวร เช้า/บ่าย/ดึก ให้เท่ากัน\n` +
-                                 `4. Staff = 5/3/2 ทุกวัน`;
-                
+                const confirmMsg = `🎯 ยืนยันการจัดเวร AI?\n\nกฎ: ${config.rules.join(', ')}`;
                 if (!confirm(confirmMsg)) return;
 
                 setIsGenerating(true);
@@ -341,7 +241,7 @@
                 const days = getDaysInMonth();
                 let newSchedule = { ...schedule };
                 
-                // 1. Reset
+                // Clear shifts
                 nurses.forEach(n => {
                     for(let d=1; d<=days; d++) {
                         if(['ช','บ','ด'].includes(newSchedule[getKey(n.id, 1, d)])) newSchedule[getKey(n.id, 1, d)] = '0';
@@ -352,61 +252,62 @@
                 let nurseStats = {};
                 nurses.forEach(n => nurseStats[n.id] = { m: 0, a: 0, n: 0, total: 0 });
 
-                const getSortedCandidates = (candidates, shiftType) => {
+                // Scoring AI
+                const getAICandidates = (candidates, shiftType) => {
                     return [...candidates].sort((a, b) => {
-                        const typeA = nurseStats[a.id][shiftType];
-                        const typeB = nurseStats[b.id][shiftType];
-                        if (typeA !== typeB) return typeA - typeB;
-                        return nurseStats[a.id].total - nurseStats[b.id].total;
+                        const statsA = nurseStats[a.id];
+                        const statsB = nurseStats[b.id];
+                        const scoreA = (statsA[shiftType] * 100) + statsA.total + (Math.random() * 0.5);
+                        const scoreB = (statsB[shiftType] * 100) + statsB.total + (Math.random() * 0.5);
+                        return scoreA - scoreB;
                     });
                 };
 
-                // Helper to check for consecutive double shifts (Iron Rule #2)
-                const wasDoubleYesterday = (nurseId, currentDay) => {
-                    if (currentDay <= 1) return false;
-                    const k0 = getKey(nurseId, 0, currentDay - 1);
-                    const k1 = getKey(nurseId, 1, currentDay - 1);
-                    // Double shift means both Top and Bottom rows are working shifts
-                    return (['ช','บ','ด'].includes(newSchedule[k0]) && ['ช','บ','ด'].includes(newSchedule[k1]));
+                const getConsecutiveDays = (scheduleData, nurseId, currentDay) => {
+                    let count = 0;
+                    for(let i = currentDay - 1; i >= 1; i--) {
+                        const worked = ['ช','บ','ด'].includes(scheduleData[getKey(nurseId, 0, i)]) || ['ช','บ','ด'].includes(scheduleData[getKey(nurseId, 1, i)]);
+                        if(worked) count++; else break;
+                    }
+                    return count;
                 };
 
                 for (let d = 1; d <= days; d++) {
                     const isRed = isHoliday(d);
-                    const targetM = 5;
-                    const targetA = 3;
-                    const targetN = 2;
+                    const targetM = config.shiftTargets['ช'] || 5;
+                    const targetA = config.shiftTargets['บ'] || 3;
+                    const targetN = config.shiftTargets['ด'] || 2;
 
-                    // --- 1. Pre-Assign HN ---
+                    // 1. Pre-Assign HN
                     const hn = nurses.find(isHN);
                     let hnWorked = false;
                     if (hn) {
                         if (!isRed && !NON_WORKING_CODES.includes(newSchedule[getKey(hn.id, 1, d)])) {
-                            newSchedule[getKey(hn.id, 1, d)] = 'ช';
-                            nurseStats[hn.id].m++;
-                            nurseStats[hn.id].total++;
-                            hnWorked = true;
+                            if (getConsecutiveDays(newSchedule, hn.id, d) < 7) { // Max 7 rule
+                                newSchedule[getKey(hn.id, 1, d)] = 'ช';
+                                nurseStats[hn.id].m++;
+                                nurseStats[hn.id].total++;
+                                hnWorked = true;
+                            }
                         }
                     }
 
-                    // --- 2. Identify Available Staff ---
+                    // 2. Identify Available
                     let availableIds = [];
                     nurses.forEach(n => {
                         if (n.id === hn?.id) return;
                         const k1 = getKey(n.id, 1, d);
                         if (NON_WORKING_CODES.includes(newSchedule[k1])) return;
-                        
-                        // IRON RULE #1: No Night -> Morning (Strict: Post-Night = Off)
-                        // If yesterday was Night, skip today entirely
-                        if (d > 1 && newSchedule[getKey(n.id, 1, d-1)] === 'ด') return;
-
+                        if (d > 1 && newSchedule[getKey(n.id, 1, d-1)] === 'ด') return; // No N->M
+                        if (getConsecutiveDays(newSchedule, n.id, d) >= 7) return; // Max 7
                         availableIds.push(n.id);
                     });
 
                     let candidates = nurses.filter(n => availableIds.includes(n.id));
                     let assignedToday = [];
 
-                    // --- 3. Assign Night ---
-                    let nightPool = getSortedCandidates(candidates, 'n');
+                    // 3. Assign N
+                    let nightPool = getAICandidates(candidates, 'n');
                     let countN = 0;
                     for (let n of nightPool) {
                         if (countN < targetN) {
@@ -419,8 +320,8 @@
                     }
                     candidates = candidates.filter(n => !assignedToday.includes(n.id));
 
-                    // --- 4. Assign Afternoon ---
-                    let afternoonPool = getSortedCandidates(candidates, 'a');
+                    // 4. Assign A
+                    let afternoonPool = getAICandidates(candidates, 'a');
                     let countA = 0;
                     for (let n of afternoonPool) {
                         if (countA < targetA) {
@@ -433,8 +334,8 @@
                     }
                     candidates = candidates.filter(n => !assignedToday.includes(n.id));
 
-                    // --- 5. Assign Morning ---
-                    let morningPool = getSortedCandidates(candidates, 'm');
+                    // 5. Assign M
+                    let morningPool = getAICandidates(candidates, 'm');
                     let countM = hnWorked ? 1 : 0;
                     for (let n of morningPool) {
                         if (countM < targetM) {
@@ -446,36 +347,13 @@
                         }
                     }
 
-                    // --- 6. Fill Gaps with OT (Apply Iron Rule #2) ---
-                    
-                    // Fill M gap (OT Morning for Afternoon Nurse)
-                    if (countM < targetM) {
+                    // 6. Fill Gaps with OT (Simplified Logic)
+                     if (countM < targetM) {
                         let needed = targetM - countM;
-                        let doublePool = nurses.filter(n => newSchedule[getKey(n.id, 1, d)] === 'บ'); 
-                        doublePool = getSortedCandidates(doublePool, 'm');
-                        for (let n of doublePool) {
+                        let otPool = nurses.filter(n => newSchedule[getKey(n.id, 1, d)] === 'บ'); // OT เช้า สำหรับคนอยู่บ่าย
+                        for (let n of otPool) {
                             if (needed > 0) {
-                                // IRON RULE #2: No Consecutive Double Shifts
-                                if (wasDoubleYesterday(n.id, d)) continue; 
-
                                 newSchedule[getKey(n.id, 0, d)] = 'ช';
-                                nurseStats[n.id].total++;
-                                needed--;
-                            }
-                        }
-                    }
-
-                    // Fill A gap (OT Afternoon for Morning Nurse)
-                    if (countA < targetA) {
-                        let needed = targetA - countA;
-                        let doublePool = nurses.filter(n => newSchedule[getKey(n.id, 1, d)] === 'ช');
-                        doublePool = getSortedCandidates(doublePool, 'a');
-                        for (let n of doublePool) {
-                            if (needed > 0) {
-                                // IRON RULE #2: No Consecutive Double Shifts
-                                if (wasDoubleYesterday(n.id, d)) continue;
-
-                                newSchedule[getKey(n.id, 0, d)] = 'บ';
                                 nurseStats[n.id].total++;
                                 needed--;
                             }
@@ -483,46 +361,37 @@
                     }
                 }
 
-                // --- 7. Strict Limit Adjustment ---
+                // 7. Limit Adjustment (Simple Flip)
                 nurses.forEach(n => {
                     let currentWorkDays = 0;
-                    for(let d=1; d<=days; d++) {
-                        // นับ Va เป็นวันทำการด้วย
-                        if(['ช','บ','ด','Va'].includes(newSchedule[getKey(n.id, 1, d)])) currentWorkDays++;
-                    }
-
-                    let excess = currentWorkDays - workDayLimit;
+                    for(let d=1; d<=days; d++) if(['ช','บ','ด'].includes(newSchedule[getKey(n.id, 1, d)])) currentWorkDays++;
+                    let excess = currentWorkDays - config.workDayLimit;
+                    
                     if (excess > 0) {
-                        for (let d = 1; d <= days && excess > 0; d++) {
-                            const k1 = getKey(n.id, 1, d);
-                            const k0 = getKey(n.id, 0, d);
-                            if (newSchedule[k1] === 'ช' && newSchedule[k0] === '0') {
-                                newSchedule[k0] = 'ช'; 
-                                newSchedule[k1] = '0'; 
-                                excess--;
-                            }
+                        let flippable = [];
+                        for (let d = 1; d <= days; d++) {
+                             if (newSchedule[getKey(n.id, 1, d)] === 'ช' && newSchedule[getKey(n.id, 0, d)] === '0') flippable.push(d);
+                        }
+                        flippable.sort(() => Math.random() - 0.5);
+                        for (let i = 0; i < excess && i < flippable.length; i++) {
+                            const d = flippable[i];
+                            newSchedule[getKey(n.id, 0, d)] = 'ช';
+                            newSchedule[getKey(n.id, 1, d)] = '0';
                         }
                     }
                 });
 
                 setSchedule(newSchedule);
-                saveAll(null, newSchedule, null, workDayLimit, customConditions, null, null, null);
+                saveAll(null, newSchedule, null, null);
                 setIsGenerating(false);
             };
 
             // --- EVENT HANDLERS ---
-            const handleLimitChange = (e) => {
-                const val = parseInt(e.target.value) || 0;
-                setWorkDayLimit(val);
-                saveAll(null, null, null, val, customConditions, null, null, null);
-            };
-
             const toggleHoliday = (day) => {
                 const newHolidays = customHolidays.includes(day) 
                     ? customHolidays.filter(d => d !== day) 
                     : [...customHolidays, day];
-                setCustomHolidays(newHolidays);
-                saveAll(null, null, newHolidays, workDayLimit, customConditions, null, null, null);
+                saveAll(null, null, newHolidays, null);
             };
 
             const cycleShift = (id, row, day) => {
@@ -531,44 +400,37 @@
                 const cycleOrder = (row === 0) ? CYCLE_TOP : CYCLE_BOTTOM;
                 const nextIndex = (cycleOrder.indexOf(current) + 1) % cycleOrder.length;
                 const newSchedule = { ...schedule, [key]: cycleOrder[nextIndex] };
-                saveAll(null, newSchedule, null, workDayLimit, customConditions, null, null, null);
+                saveAll(null, newSchedule, null, null);
             };
 
+            // Nurse Management
             const handleAddNurse = () => {
-                if(!newNurse.name.trim()) {
-                    alert('⚠️ กรุณากรอกชื่อพยาบาล');
-                    return;
-                }
+                if(!newNurse.name.trim()) return alert('⚠️ กรุณากรอกชื่อพยาบาล');
                 const updated = [...nurses, { id: Date.now(), name: newNurse.name, pos: newNurse.pos || 'L1' }];
-                saveAll(updated, null, null, workDayLimit, customConditions, null, null, null);
+                saveAll(updated, null, null, null);
                 setNewNurse({ name: '', pos: 'L1' });
-                setShowModal(false);
+                setShowAddNurseModal(false);
             };
-
             const handleDeleteNurse = (id) => {
-                if(confirm(`🗑️ ยืนยันการลบ?`)) {
-                    saveAll(nurses.filter(n => n.id !== id), null, null, workDayLimit, customConditions, null, null, null);
-                }
+                if(confirm(`🗑️ ยืนยันการลบ?`)) saveAll(nurses.filter(n => n.id !== id), null, null, null);
             };
-
             const handleSaveEdit = () => {
                 if (!editingNurse.name.trim()) return;
                 const updatedNurses = nurses.map(n => n.id === editingNurse.id ? { ...editingNurse } : n);
-                saveAll(updatedNurses, null, null, workDayLimit, customConditions, null, null, null);
+                saveAll(updatedNurses, null, null, null);
                 setEditingNurse(null);
             };
 
             const clearAllData = () => {
                 if(confirm("⚠️ ล้างข้อมูลเวรทั้งหมด?")) {
                     setSchedule({});
-                    saveAll(null, {}, null, workDayLimit, customConditions, null, null, null);
+                    saveAll(null, {}, null, null);
                 }
             };
 
             const exportExcel = () => {
                 const wb = XLSX.utils.book_new();
                 const days = Array.from({length: getDaysInMonth()}, (_, i) => i + 1);
-                
                 const data = [];
                 data.push(['ลำดับ', 'ชื่อ-สกุล', 'ตำแหน่ง', ...days, 'วันทำการ', 'รวม บ/ด', 'ค่าเวร', 'รวม OT', 'ค่า OT']);
                 
@@ -577,68 +439,198 @@
                     const row1 = [idx + 1, n.name, n.pos];
                     days.forEach(d => row1.push(schedule[getKey(n.id, 0, d)] || '0'));
                     row1.push(s.workDays, s.bdCount, s.bdPay, s.otCount, s.otPay);
-                    
                     const row2 = ['', '', ''];
                     days.forEach(d => row2.push(schedule[getKey(n.id, 1, d)] || '0'));
                     row2.push('', '', '', '', '');
-
                     data.push(row1, row2);
                 });
 
                 const ws = XLSX.utils.aoa_to_sheet(data);
                 XLSX.utils.book_append_sheet(wb, ws, "Roster");
-                XLSX.writeFile(wb, `Roster_v38_${currentDate.getMonth()+1}.xlsx`);
+                XLSX.writeFile(wb, `Roster_v40_${currentDate.getMonth()+1}.xlsx`);
             };
 
-            // Settings handlers
-            const updateShiftSetting = (index, field, value) => {
-                const updated = [...shiftSettings];
-                updated[index] = { ...updated[index], [field]: value };
-                setShiftSettings(updated);
-            };
+            // --- SUB-COMPONENT: SETTINGS MODAL ---
+            const SettingsModal = () => {
+                // Local state for editing inside modal
+                const [localConfig, setLocalConfig] = useState(JSON.parse(JSON.stringify(config)));
+                const [newRule, setNewRule] = useState('');
 
-            const addNewShift = () => {
-                const newShift = { symbol: 'N', name: 'เวรใหม่', color: 'bg-gray-100 text-gray-800', rate: 0, target: 0, enabled: true };
-                setShiftSettings([...shiftSettings, newShift]);
-            };
+                const handleSaveSettings = () => {
+                    saveAll(null, null, null, localConfig);
+                    setShowSettingsModal(false);
+                };
 
-            const removeShift = (index) => {
-                if (shiftSettings.length <= 1) {
-                    alert('ต้องมีเวรอย่างน้อย 1 เวร');
-                    return;
-                }
-                const updated = shiftSettings.filter((_, i) => i !== index);
-                setShiftSettings(updated);
-            };
+                const updateShiftRate = (key, val) => {
+                    setLocalConfig(prev => ({...prev, shiftRates: {...prev.shiftRates, [key]: parseInt(val) || 0}}));
+                };
 
-            const updateRate = (field, value) => {
-                const updated = { ...rates, [field]: parseInt(value) || 0 };
-                setRates(updated);
-            };
+                const updateShiftTarget = (key, val) => {
+                    setLocalConfig(prev => ({...prev, shiftTargets: {...prev.shiftTargets, [key]: parseInt(val) || 0}}));
+                };
 
-            const updateIronRule = (index, value) => {
-                const updated = [...ironRules];
-                updated[index] = value;
-                setIronRules(updated);
-            };
+                const addRule = () => {
+                    if (newRule.trim()) {
+                        setLocalConfig(prev => ({...prev, rules: [...prev.rules, newRule.trim()]}));
+                        setNewRule('');
+                    }
+                };
 
-            const addIronRule = () => {
-                setIronRules([...ironRules, 'กฎใหม่']);
-            };
+                const removeRule = (index) => {
+                    setLocalConfig(prev => ({...prev, rules: prev.rules.filter((_, i) => i !== index)}));
+                };
 
-            const removeIronRule = (index) => {
-                const updated = ironRules.filter((_, i) => i !== index);
-                setIronRules(updated);
-            };
+                return (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] backdrop-blur-sm">
+                        <div className="bg-white rounded-xl shadow-2xl w-[600px] max-h-[90vh] overflow-y-auto flex flex-col">
+                            {/* Header */}
+                            <div className="flex justify-between items-center p-4 border-b">
+                                <h2 className="text-xl font-bold text-gray-800">การตั้งค่าระบบตารางเวร</h2>
+                                <button onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-gray-600">
+                                    <X size={24} />
+                                </button>
+                            </div>
 
-            const saveSettings = () => {
-                saveAll(null, null, null, workDayLimit, customConditions, shiftSettings, rates, ironRules);
-                setShowSettings(false);
+                            <div className="p-6 space-y-6">
+                                {/* 1. Target Workdays */}
+                                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                    <h3 className="font-bold text-blue-800 mb-2">1. เป้าหมายวันทำการ</h3>
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm">จำนวนวันทำการเป้าหมาย:</span>
+                                            <input 
+                                                type="number" 
+                                                value={localConfig.workDayLimit} 
+                                                onChange={(e) => setLocalConfig({...localConfig, workDayLimit: parseInt(e.target.value) || 0})}
+                                                className="w-20 border rounded p-1 text-center font-bold"
+                                            />
+                                        </div>
+                                        <div className="text-xs text-gray-500">* หากทำไม่ครบจะแสดงตัวเลขติดลบในช่อง "วันทำการ"</div>
+                                    </div>
+                                    <div className="text-sm mt-1 text-gray-600">จำนวนวันในเดือนนี้: {getDaysInMonth()} วัน</div>
+                                </div>
+
+                                {/* 2. Shift Details */}
+                                <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h3 className="font-bold text-green-800">2. รายละเอียดเวร (Shifts)</h3>
+                                        <button className="text-xs bg-green-600 text-white px-2 py-1 rounded flex items-center gap-1 opacity-50 cursor-not-allowed" title="ฟีเจอร์นี้ยังไม่เปิดใช้งานในเวอร์ชั่นนี้">
+                                            <Plus size={12}/> เพิ่มเวร
+                                        </button>
+                                    </div>
+                                    <div className="bg-white rounded border overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="py-2">สี</th>
+                                                    <th className="py-2">สัญลักษณ์</th>
+                                                    <th className="py-2">ชื่อ</th>
+                                                    <th className="py-2">ราคา (บาท)</th>
+                                                    <th className="py-2">เป้า (คน)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {[
+                                                    {key: 'ช', name: 'เช้า', color: 'bg-green-100'},
+                                                    {key: 'บ', name: 'บ่าย', color: 'bg-yellow-100'},
+                                                    {key: 'ด', name: 'ดึก', color: 'bg-purple-100'}
+                                                ].map(s => (
+                                                    <tr key={s.key} className="border-t">
+                                                        <td className="p-2"><div className={`w-6 h-6 rounded ${s.color} mx-auto border`}></div></td>
+                                                        <td className="p-2 font-bold">{s.key}</td>
+                                                        <td className="p-2 w-full text-left">
+                                                            <input type="text" value={s.name} disabled className="w-full p-1 border rounded bg-gray-50"/>
+                                                        </td>
+                                                        <td className="p-2">
+                                                            <input 
+                                                                type="number" 
+                                                                className="w-20 p-1 border rounded text-right"
+                                                                value={localConfig.shiftRates[s.key]}
+                                                                onChange={(e) => updateShiftRate(s.key, e.target.value)}
+                                                            />
+                                                        </td>
+                                                        <td className="p-2">
+                                                            <input 
+                                                                type="number" 
+                                                                className="w-16 p-1 border rounded text-center"
+                                                                value={localConfig.shiftTargets[s.key]}
+                                                                onChange={(e) => updateShiftTarget(s.key, e.target.value)}
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {/* 3. Compensation */}
+                                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+                                    <h3 className="font-bold text-yellow-800 mb-2">3. ค่าตอบแทน</h3>
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-semibold">ค่าเวร OT:</span>
+                                            <input 
+                                                type="number" 
+                                                value={localConfig.otRate}
+                                                onChange={(e) => setLocalConfig({...localConfig, otRate: parseInt(e.target.value) || 0})}
+                                                className="w-24 border rounded p-1 text-right font-bold"
+                                            />
+                                            <span className="text-sm">บาท</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-xs text-gray-500 mt-2">ค่าเวรบ่าย/ดึก: อ้างอิงจากตารางด้านบน</div>
+                                </div>
+
+                                {/* 4. Rules */}
+                                <div className="bg-red-50 p-4 rounded-lg border border-red-100">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h3 className="font-bold text-red-800">4. กฎเหล็ก (ใช้ในการ Auto)</h3>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                value={newRule} 
+                                                onChange={(e) => setNewRule(e.target.value)}
+                                                placeholder="เพิ่มกฎ..."
+                                                className="text-xs border rounded p-1 w-32"
+                                                onKeyPress={(e) => e.key === 'Enter' && addRule()}
+                                            />
+                                            <button onClick={addRule} className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700">
+                                                + เพิ่มกฎ
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                                        {localConfig.rules.map((rule, idx) => (
+                                            <div key={idx} className="bg-white p-2 rounded border flex justify-between items-center shadow-sm">
+                                                <span className="text-sm text-gray-700">{rule}</span>
+                                                <button onClick={() => removeRule(idx)} className="text-red-400 hover:text-red-600">
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {localConfig.rules.length === 0 && <div className="text-center text-gray-400 text-xs py-2">ยังไม่มีกฎ</div>}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Footer Buttons */}
+                            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3 rounded-b-xl">
+                                <button onClick={() => setShowSettingsModal(false)} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium">
+                                    ยกเลิก
+                                </button>
+                                <button onClick={handleSaveSettings} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold flex items-center gap-2">
+                                    <Save size={18} /> บันทึกการตั้งค่า
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
             };
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden">
-                    {/* 1. Header & Toolbar */}
+                    {/* Header */}
                     <div className="bg-white border-b border-gray-200 shadow-sm shrink-0 z-50">
                         <div className="p-3 flex justify-between items-center">
                             <div className="flex items-center gap-4">
@@ -646,7 +638,7 @@
                                     <Calculator size={24} />
                                 </div>
                                 <div>
-                                    <h1 className="text-xl font-bold text-gray-800">ระบบตารางเวรพยาบาล <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">v38 Iron Rules</span></h1>
+                                    <h1 className="text-xl font-bold text-gray-800">ระบบตารางเวรพยาบาล <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">v40 Settings UI</span></h1>
                                     <div className="flex items-center gap-2 text-sm text-gray-500">
                                         <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} className="hover:text-blue-600"><ChevronLeft size={16}/></button>
                                         <span className="font-semibold w-32 text-center">{currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}</span>
@@ -655,32 +647,15 @@
                                 </div>
                             </div>
 
-                            {/* 2. Condition Input Area */}
-                            <div className="flex-1 mx-6 no-print relative">
-                                <span className="absolute -top-3 left-0 text-[10px] text-gray-500 bg-white px-1">เงื่อนไขพิเศษ / กฎเหล็ก</span>
-                                <textarea
-                                    value={customConditions}
-                                    onChange={(e) => saveAll(null, null, null, workDayLimit, e.target.value, null, null, null)}
-                                    className="w-full bg-yellow-50/50 border border-yellow-200 rounded-lg py-2 px-3 text-xs focus:ring-2 focus:ring-yellow-400 focus:outline-none resize-none h-10 transition-all focus:h-20 shadow-sm placeholder-gray-400"
-                                    placeholder="เช่น ห้ามเวรดึกติดกัน, L1 ลาพักร้อนวันที่ 15..."
-                                />
-                            </div>
-
+                            {/* Toolbar */}
                             <div className="flex items-center gap-2 no-print">
-                                <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">
-                                    <Settings size={14} className="text-gray-500"/>
-                                    <span className="text-xs font-medium text-gray-600">เป้าหมายวันทำการ:</span>
-                                    <input 
-                                        type="number" 
-                                        value={workDayLimit} 
-                                        onChange={handleLimitChange}
-                                        className="w-10 text-center text-sm font-bold bg-white border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                    />
+                                <div className="flex items-center gap-2 bg-yellow-50 px-3 py-1.5 rounded-lg border border-yellow-200 text-yellow-800 text-xs font-medium mr-4">
+                                    <AlertCircle size={14} />
+                                    <span>เป้า: {config.workDayLimit} วัน | OT: {config.otRate}฿</span>
                                 </div>
 
-                                <button onClick={() => setShowSettings(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-transform active:scale-95">
-                                    <Settings size={16} /> 
-                                    <span>ตั้งค่า</span>
+                                <button onClick={() => setShowSettingsModal(true)} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1">
+                                    <Settings size={16} /> ตั้งค่าระบบ
                                 </button>
 
                                 <button onClick={autoGenerateRoster} disabled={isGenerating} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-transform active:scale-95">
@@ -688,14 +663,12 @@
                                     <span>Auto</span>
                                 </button>
                                 
-                                <button onClick={() => setShowModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-transform active:scale-95">
-                                    <UserPlus size={16} /> 
-                                    <span>เพิ่มคน</span>
+                                <button onClick={() => setShowAddNurseModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-transform active:scale-95">
+                                    <UserPlus size={16} /> เพิ่มคน
                                 </button>
                                 
                                 <button onClick={exportExcel} className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-transform active:scale-95">
-                                    <Download size={16} /> 
-                                    <span>Excel</span>
+                                    <Download size={16} /> Excel
                                 </button>
 
                                 <button onClick={clearAllData} className="bg-gray-200 hover:bg-red-500 hover:text-white text-gray-600 px-3 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors">
@@ -705,9 +678,8 @@
                         </div>
                     </div>
 
-                    {/* 3. Main Table Area */}
+                    {/* Main Table */}
                     <div className="flex-1 overflow-auto bg-gray-100 p-4">
-                        {/* Wrapper to handle scrolling - overflow-x-auto enables horizontal scroll */}
                         <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-x-auto max-w-full">
                             <table className="w-full min-w-max">
                                 <thead>
@@ -721,11 +693,7 @@
                                             const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
                                             const dayName = ['อา','จ','อ','พ','พฤ','ศ','ส'][dateObj.getDay()];
                                             return (
-                                                <th 
-                                                    key={i} 
-                                                    onClick={() => toggleHoliday(day)}
-                                                    className={`min-w-[36px] cursor-pointer hover:bg-gray-200 transition-colors ${isRed ? 'bg-red-50 text-red-600' : ''}`}
-                                                >
+                                                <th key={i} onClick={() => toggleHoliday(day)} className={`min-w-[36px] cursor-pointer hover:bg-gray-200 transition-colors ${isRed ? 'bg-red-50 text-red-600' : ''}`}>
                                                     <div className="flex flex-col items-center leading-tight">
                                                         <span className="text-[13px] font-bold">{day}</span>
                                                         <span className="text-[10px] font-normal">{dayName}</span>
@@ -733,33 +701,26 @@
                                                 </th>
                                             );
                                         })}
-                                        {/* Right Summary Columns - ensured visible via scrolling */}
                                         <th className="bg-blue-50 text-blue-900 border-l-2 border-blue-200 min-w-[60px] px-1">วัน<br/>ทำการ</th>
                                         <th className="bg-yellow-50 text-yellow-900 border-l border-yellow-200 min-w-[60px] px-1">รวม<br/>บ่าย/ดึก</th>
-                                        <th className="bg-green-50 text-green-900 border-l border-green-200 min-w-[70px] px-1">ราคา<br/>(360)</th>
+                                        <th className="bg-green-50 text-green-900 border-l border-green-200 min-w-[70px] px-1">ค่าเวร<br/>(บ/ด)</th>
                                         <th className="bg-orange-50 text-orange-900 border-l-2 border-orange-200 min-w-[60px] px-1">รวม<br/>OT</th>
-                                        <th className="bg-orange-100 text-orange-900 border-l border-orange-200 min-w-[70px] px-1">ราคา<br/>(800)</th>
+                                        <th className="bg-orange-100 text-orange-900 border-l border-orange-200 min-w-[70px] px-1">ค่า OT<br/>({config.otRate})</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {nurses.map((nurse, idx) => {
                                         const s = countStats(nurse.id);
-                                        const isBalanced = s.workDays === workDayLimit;
+                                        const isBalanced = s.workDays === config.workDayLimit;
                                         
                                         return (
                                             <React.Fragment key={nurse.id}>
-                                                {/* Top Row: OT & Stats */}
                                                 <tr className="border-b-0 hover:bg-gray-50">
                                                     <td rowSpan={2} className="sticky-1 font-bold text-gray-500 bg-white">{idx + 1}</td>
                                                     <td rowSpan={2} className="sticky-2 text-left px-2 bg-white">
                                                         {editingNurse?.id === nurse.id ? (
                                                             <div className="flex flex-col gap-1 z-50 relative">
-                                                                <input 
-                                                                    autoFocus
-                                                                    className="border rounded px-1 text-sm w-full"
-                                                                    value={editingNurse.name} 
-                                                                    onChange={e => setEditingNurse({...editingNurse, name: e.target.value})} 
-                                                                />
+                                                                <input autoFocus className="border rounded px-1 text-sm w-full" value={editingNurse.name} onChange={e => setEditingNurse({...editingNurse, name: e.target.value})} />
                                                                 <div className="flex gap-1">
                                                                     <button onClick={handleSaveEdit} className="bg-green-500 text-white text-xs px-2 rounded">Save</button>
                                                                     <button onClick={() => setEditingNurse(null)} className="bg-gray-300 text-black text-xs px-2 rounded">Cancel</button>
@@ -777,39 +738,25 @@
                                                     </td>
                                                     <td rowSpan={2} className="sticky-3 font-semibold text-gray-600 bg-white">
                                                         {editingNurse?.id === nurse.id ? (
-                                                            <select 
-                                                                className="border rounded text-xs w-full"
-                                                                value={editingNurse.pos}
-                                                                onChange={e => setEditingNurse({...editingNurse, pos: e.target.value})}
-                                                            >
-                                                                <option value="หนต.">หนต.</option>
-                                                                <option value="L5">L5</option>
-                                                                <option value="L4">L4</option>
-                                                                <option value="L2">L2</option>
-                                                                <option value="L1">L1</option>
+                                                            <select className="border rounded text-xs w-full" value={editingNurse.pos} onChange={e => setEditingNurse({...editingNurse, pos: e.target.value})}>
+                                                                <option value="หนต.">หนต.</option><option value="L5">L5</option><option value="L4">L4</option><option value="L2">L2</option><option value="L1">L1</option>
                                                             </select>
                                                         ) : nurse.pos}
                                                     </td>
                                                     
-                                                    {/* Days (OT Row) */}
                                                     {Array.from({ length: getDaysInMonth() }, (_, i) => {
                                                         const d = i + 1;
                                                         const val = schedule[getKey(nurse.id, 0, d)] || '0';
                                                         return (
-                                                            <td 
-                                                                key={`ot-${d}`} 
-                                                                onClick={() => cycleShift(nurse.id, 0, d)}
-                                                                className={`cell-hover text-xs ${val !== '0' ? 'font-bold text-red-600 bg-red-50' : 'text-gray-200'}`}
-                                                            >
+                                                            <td key={`ot-${d}`} onClick={() => cycleShift(nurse.id, 0, d)} className={`cell-hover text-xs ${val !== '0' ? 'font-bold text-red-600 bg-red-50' : 'text-gray-200'}`}>
                                                                 {val}
                                                             </td>
                                                         );
                                                     })}
 
-                                                    {/* Stats Columns - Data */}
                                                     <td rowSpan={2} className={`font-bold text-sm border-l-2 border-blue-200 ${isBalanced ? 'text-green-600 bg-green-50' : 'text-red-500 bg-white'}`}>
                                                         {s.workDays}
-                                                        {!isBalanced && <div className="text-[9px] font-normal text-gray-400">{s.workDays - workDayLimit > 0 ? `+${s.workDays - workDayLimit}` : `${s.workDays - workDayLimit}`}</div>}
+                                                        {!isBalanced && <div className="text-[9px] font-normal text-gray-400">{s.workDays - config.workDayLimit > 0 ? `+${s.workDays - config.workDayLimit}` : `${s.workDays - config.workDayLimit}`}</div>}
                                                     </td>
                                                     <td rowSpan={2} className="bg-yellow-50 font-semibold border-l border-yellow-200">{s.bdCount}</td>
                                                     <td rowSpan={2} className="bg-green-50 text-gray-600 text-xs border-l border-green-200">{s.bdPay > 0 ? s.bdPay.toLocaleString() : '-'}</td>
@@ -817,18 +764,13 @@
                                                     <td rowSpan={2} className="bg-orange-100 text-orange-800 font-semibold text-xs border-l border-orange-200">{s.otPay > 0 ? s.otPay.toLocaleString() : '-'}</td>
                                                 </tr>
 
-                                                {/* Bottom Row: Normal Shifts */}
                                                 <tr className="border-b border-gray-300">
                                                     {Array.from({ length: getDaysInMonth() }, (_, i) => {
                                                         const d = i + 1;
                                                         const val = schedule[getKey(nurse.id, 1, d)] || '0';
-                                                        const style = SHIFT_TYPES[val] || SHIFT_TYPES['0'];
+                                                        const style = SHIFT_METADATA[val] || SHIFT_METADATA['0'];
                                                         return (
-                                                            <td 
-                                                                key={`norm-${d}`} 
-                                                                onClick={() => cycleShift(nurse.id, 1, d)}
-                                                                className={`cell-hover text-xs ${style.color}`}
-                                                            >
+                                                            <td key={`norm-${d}`} onClick={() => cycleShift(nurse.id, 1, d)} className={`cell-hover text-xs ${style.color}`}>
                                                                 {val}
                                                             </td>
                                                         );
@@ -839,17 +781,12 @@
                                     })}
                                 </tbody>
                                 <tfoot>
-                                    {/* Footer Summary aligned to Day 1 */}
                                     <tr className="bg-gray-100 font-bold text-xs text-gray-600 border-t-2 border-gray-300">
                                         <td colSpan="3" className="sticky-1 text-right pr-2 bg-gray-100 z-40">รวม เช้า</td>
                                         {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                                            const day = i + 1;
-                                            // Count both rows for staffing check (Normal + OT)
-                                            const c = countDailyTotal(day, 'ช');
-                                            // Target Logic: Every day 5
-                                            const target = 5;
+                                            const c = countDailyTotal(i + 1, 'ช');
+                                            const target = config.shiftTargets['ช'] || 5;
                                             const statusColor = c < target ? 'text-red-600 bg-red-100' : (c > target ? 'text-blue-600 bg-blue-100' : 'text-green-700 bg-green-100');
-                                            
                                             return <td key={i} className={statusColor}>{c || '-'}</td>;
                                         })}
                                         <td colSpan="5" className="bg-gray-200"></td>
@@ -857,12 +794,9 @@
                                     <tr className="bg-gray-100 font-bold text-xs text-gray-600">
                                         <td colSpan="3" className="sticky-1 text-right pr-2 bg-gray-100 z-40">รวม บ่าย</td>
                                         {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                                            const day = i + 1;
-                                            const c = countDailyTotal(day, 'บ');
-                                            // Target Logic: Every day 3
-                                            const target = 3;
+                                            const c = countDailyTotal(i + 1, 'บ');
+                                            const target = config.shiftTargets['บ'] || 3;
                                             const statusColor = c < target ? 'text-red-600 bg-red-100' : (c > target ? 'text-blue-600 bg-blue-100' : 'text-yellow-700 bg-yellow-100');
-                                            
                                             return <td key={i} className={statusColor}>{c || '-'}</td>;
                                         })}
                                         <td colSpan="5" className="bg-gray-200"></td>
@@ -870,12 +804,9 @@
                                     <tr className="bg-gray-100 font-bold text-xs text-gray-600 border-b-2 border-gray-300">
                                         <td colSpan="3" className="sticky-1 text-right pr-2 bg-gray-100 z-40">รวม ดึก</td>
                                         {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                                            const day = i + 1;
-                                            const c = countDailyTotal(day, 'ด');
-                                            // Target Logic: Every day 2
-                                            const target = 2;
+                                            const c = countDailyTotal(i + 1, 'ด');
+                                            const target = config.shiftTargets['ด'] || 2;
                                             const statusColor = c < target ? 'text-red-600 bg-red-100' : (c > target ? 'text-blue-600 bg-blue-100' : 'text-purple-700 bg-purple-100');
-
                                             return <td key={i} className={statusColor}>{c || '-'}</td>;
                                         })}
                                         <td colSpan="5" className="bg-gray-200"></td>
@@ -885,228 +816,33 @@
                         </div>
                     </div>
 
-                    {/* 4. Legend Footer */}
+                    {/* Footer Legend */}
                     <div className="bg-white p-2 border-t border-gray-200 text-[11px] text-gray-600 flex justify-center gap-4 shrink-0 no-print">
                         <span className="font-bold">สัญลักษณ์:</span>
                         <span className="px-2 py-0.5 rounded bg-green-100 text-green-800">ช (เช้า)</span>
-                        <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">บ (บ่าย) 360฿</span>
-                        <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800">ด (ดึก) 360฿</span>
-                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800">Va (วันทำการ)</span>
-                        <span className="px-2 py-0.5 rounded bg-red-50 text-red-600 font-bold border border-red-200">ตัวแดงแถวบน (OT) 800฿</span>
+                        <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">บ (บ่าย) {config.shiftRates['บ']}฿</span>
+                        <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800">ด (ดึก) {config.shiftRates['ด']}฿</span>
+                        <span className="px-2 py-0.5 rounded bg-red-50 text-red-600 font-bold border border-red-200">ตัวแดงแถวบน (OT) {config.otRate}฿</span>
                     </div>
-                    <div className="text-center text-[10px] text-gray-400 font-medium">
+                    <div className="text-center text-[10px] text-gray-400 font-medium pb-1">
                             พัฒนาโดย พว.วิษณุกรณ์ โอยา (รพ.ชลบุรี)
-                        </div>
+                    </div>
 
-                    {/* Modals */}
-                    {showModal && (
+                    {/* Show Settings Modal */}
+                    {showSettingsModal && <SettingsModal />}
+
+                    {/* Add Nurse Modal */}
+                    {showAddNurseModal && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
                             <div className="bg-white p-6 rounded-lg shadow-xl w-80">
                                 <h3 className="text-lg font-bold mb-4">เพิ่มพยาบาล</h3>
                                 <input className="w-full border p-2 mb-2 rounded" placeholder="ชื่อ-สกุล" value={newNurse.name} onChange={e => setNewNurse({...newNurse, name: e.target.value})} />
                                 <select className="w-full border p-2 mb-4 rounded" value={newNurse.pos} onChange={e => setNewNurse({...newNurse, pos: e.target.value})}>
-                                    <option value="หนต.">หนต.</option>
-                                    <option value="L5">L5</option>
-                                    <option value="L4">L4</option>
-                                    <option value="L2">L2</option>
-                                    <option value="L1">L1</option>
+                                    <option value="หนต.">หนต.</option><option value="L5">L5</option><option value="L4">L4</option><option value="L2">L2</option><option value="L1">L1</option>
                                 </select>
                                 <div className="flex justify-end gap-2">
-                                    <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-200 rounded">ยกเลิก</button>
+                                    <button onClick={() => setShowAddNurseModal(false)} className="px-4 py-2 bg-gray-200 rounded">ยกเลิก</button>
                                     <button onClick={handleAddNurse} className="px-4 py-2 bg-blue-600 text-white rounded">บันทึก</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Settings Modal */}
-                    {showSettings && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-                                <div className="p-6 border-b border-gray-200">
-                                    <div className="flex justify-between items-center">
-                                        <h3 className="text-xl font-bold text-gray-800">การตั้งค่าระบบตารางเวร</h3>
-                                        <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-gray-700">
-                                            <X size={24} />
-                                        </button>
-                                    </div>
-                                </div>
-                                
-                                <div className="p-6 space-y-6">
-                                    {/* 1. Work Day Target */}
-                                    <div className="bg-blue-50 p-4 rounded-lg">
-                                        <h4 className="text-lg font-semibold text-blue-800 mb-3">1. เป้าหมายวันทำการ</h4>
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-sm font-medium text-gray-700">จำนวนวันทำการเป้าหมาย:</span>
-                                            <input 
-                                                type="number" 
-                                                value={workDayLimit} 
-                                                onChange={handleLimitChange}
-                                                className="w-20 text-center text-sm font-bold bg-white border border-gray-300 rounded px-3 py-1 focus:ring-2 focus:ring-blue-500"
-                                            />
-                                            <span className="text-xs text-gray-500">* หากทำไม่ครบจะแสดงตัวเลขติดลบในช่อง "วันทำการ"</span>
-                                        </div>
-                                        <div className="mt-2 text-sm text-gray-600">
-                                            <span className="font-medium">จำนวนวันต่อเดือน: {getDaysInMonth()}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* 2. Shift Settings */}
-                                    <div className="bg-green-50 p-4 rounded-lg">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h4 className="text-lg font-semibold text-green-800">2. รายละเอียดเวร (Shifts)</h4>
-                                            <button 
-                                                onClick={addNewShift}
-                                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
-                                            >
-                                                <Plus size={16} />
-                                                เพิ่มเวร
-                                            </button>
-                                        </div>
-                                        
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-sm">
-                                                <thead>
-                                                    <tr className="bg-green-100">
-                                                        <th className="p-2 text-left">สี</th>
-                                                        <th className="p-2 text-left">สัญลักษณ์</th>
-                                                        <th className="p-2 text-left">ชื่อ</th>
-                                                        <th className="p-2 text-center">ราคา</th>
-                                                        <th className="p-2 text-center">เป้า</th>
-                                                        <th className="p-2 text-center">ใช้งาน</th>
-                                                        <th className="p-2 text-center">จัดการ</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {shiftSettings.map((shift, index) => (
-                                                        <tr key={index} className="border-b border-green-200">
-                                                            <td className="p-2">
-                                                                <div className={`w-6 h-6 rounded ${shift.color}`}></div>
-                                                            </td>
-                                                            <td className="p-2">
-                                                                <input 
-                                                                    type="text" 
-                                                                    value={shift.symbol}
-                                                                    onChange={(e) => updateShiftSetting(index, 'symbol', e.target.value)}
-                                                                    className="w-12 text-center border rounded px-1"
-                                                                    maxLength={2}
-                                                                />
-                                                            </td>
-                                                            <td className="p-2">
-                                                                <input 
-                                                                    type="text" 
-                                                                    value={shift.name}
-                                                                    onChange={(e) => updateShiftSetting(index, 'name', e.target.value)}
-                                                                    className="w-32 border rounded px-2 py-1"
-                                                                />
-                                                            </td>
-                                                            <td className="p-2 text-center">
-                                                                <input 
-                                                                    type="number" 
-                                                                    value={shift.rate}
-                                                                    onChange={(e) => updateShiftSetting(index, 'rate', parseInt(e.target.value) || 0)}
-                                                                    className="w-20 text-center border rounded px-1"
-                                                                />
-                                                                <span className="ml-1">฿</span>
-                                                            </td>
-                                                            <td className="p-2 text-center">
-                                                                <input 
-                                                                    type="number" 
-                                                                    value={shift.target}
-                                                                    onChange={(e) => updateShiftSetting(index, 'target', parseInt(e.target.value) || 0)}
-                                                                    className="w-16 text-center border rounded px-1"
-                                                                />
-                                                            </td>
-                                                            <td className="p-2 text-center">
-                                                                <input 
-                                                                    type="checkbox" 
-                                                                    checked={shift.enabled}
-                                                                    onChange={(e) => updateShiftSetting(index, 'enabled', e.target.checked)}
-                                                                    className="w-4 h-4"
-                                                                />
-                                                            </td>
-                                                            <td className="p-2 text-center">
-                                                                <button 
-                                                                    onClick={() => removeShift(index)}
-                                                                    className="text-red-500 hover:text-red-700"
-                                                                    disabled={shiftSettings.length <= 1}
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    {/* 3. Compensation */}
-                                    <div className="bg-yellow-50 p-4 rounded-lg">
-                                        <h4 className="text-lg font-semibold text-yellow-800 mb-3">3. ค่าตอบแทน</h4>
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-sm font-medium text-gray-700">ค่าเวร OT:</span>
-                                            <input 
-                                                type="number" 
-                                                value={rates.ot}
-                                                onChange={(e) => updateRate('ot', e.target.value)}
-                                                className="w-24 text-center text-sm font-bold bg-white border border-gray-300 rounded px-3 py-1 focus:ring-2 focus:ring-yellow-500"
-                                            />
-                                            <span className="text-sm">บาท</span>
-                                        </div>
-                                        <div className="mt-2 text-sm text-gray-600">
-                                            <span className="font-medium">ค่าเวรบ่าย/ดึก: 360 บาท (คงที่)</span>
-                                        </div>
-                                    </div>
-
-                                    {/* 4. Iron Rules */}
-                                    <div className="bg-red-50 p-4 rounded-lg">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h4 className="text-lg font-semibold text-red-800">4. กฎเหล็ก</h4>
-                                            <button 
-                                                onClick={addIronRule}
-                                                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
-                                            >
-                                                <Plus size={16} />
-                                                เพิ่มกฎ
-                                            </button>
-                                        </div>
-                                        
-                                        <div className="space-y-2">
-                                            {ironRules.map((rule, index) => (
-                                                <div key={index} className="flex items-center gap-2">
-                                                    <input 
-                                                        type="text" 
-                                                        value={rule}
-                                                        onChange={(e) => updateIronRule(index, e.target.value)}
-                                                        className="flex-1 border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500"
-                                                    />
-                                                    <button 
-                                                        onClick={() => removeIronRule(index)}
-                                                        className="text-red-500 hover:text-red-700 p-2"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
-                                    <button 
-                                        onClick={() => setShowSettings(false)}
-                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-                                    >
-                                        ยกเลิก
-                                    </button>
-                                    <button 
-                                        onClick={saveSettings}
-                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                                    >
-                                        <Save size={16} />
-                                        บันทึกการตั้งค่า
-                                    </button>
                                 </div>
                             </div>
                         </div>
